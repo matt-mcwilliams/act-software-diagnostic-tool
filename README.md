@@ -91,8 +91,8 @@ docs/adr/                 Architecture decisions
 
 ## Pilot work still required
 
-Before a real pilot, add FastAPI-backed practice, reassessment, remediation
-cycles, and minimal progress history; approve a reviewed blueprint and
-inventory; add internal review/export and issue-reporting tools; and complete
-the privacy, rights, accessibility, rate-limit, and backup/restore gates in
+Before a real pilot, approve reviewed purpose-specific blueprints and
+inventory; add minimal durable progress history, internal review/export and
+issue-reporting tools; add analytics/tutor comparison; and complete the
+privacy, rights, accessibility, rate-limit, and backup/restore gates in
 `plan.md`.

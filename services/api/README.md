@@ -1,9 +1,11 @@
 # ACT Adaptive API
 
 This is the FastAPI domain boundary. It provides operational/authentication
-contracts, reviewer-only canonical content import, and the first PostgreSQL-
-backed assessment session contract. The Next.js browser flow remains in
-prototype mode until it is connected to these domain endpoints.
+contracts, reviewer-only canonical content import, PostgreSQL-backed
+diagnostics, and the first durable remediation-cycle, practice, and
+reassessment contracts. The Next.js browser uses these flows when
+`ACT_API_BASE_URL` is configured and falls back to the local prototype without
+it.
 
 ## Local development
 
@@ -64,6 +66,24 @@ GET  /v1/assessment-sessions/{session_id}
 PUT  /v1/assessment-sessions/{session_id}/responses/{session_item_id}
 POST /v1/assessment-sessions/{session_id}/submit
 GET  /v1/assessment-sessions/{session_id}/results
+
+Remediation and durable learning endpoints:
+
+```text
+POST /v1/remediation-cycles
+GET  /v1/remediation-cycles/{cycle_id}
+POST /v1/remediation-cycles/{cycle_id}/resource-events
+POST /v1/remediation-cycles/{cycle_id}/practice-sets
+POST /v1/remediation-cycles/{cycle_id}/reassessments
+GET  /v1/remediation-cycles/{cycle_id}/reassessments
+GET  /v1/practice-sets/{practice_set_id}
+POST /v1/practice-sets/{practice_set_id}/complete
+```
+
+Practice and reassessment sets reuse the public assessment-session response
+protocol. They require approved purpose-specific blueprints, approved
+rights-cleared inventory, and exclude every question already exposed to the
+student.
 ```
 
 Session items contain prompts and choices only. Response saves require an
