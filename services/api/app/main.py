@@ -13,6 +13,7 @@ from .auth import CurrentUser, get_current_user, require_reviewer
 from .assessments import (
     AssessmentConflict,
     AssessmentNotFound,
+    AssessmentResult,
     AssessmentSession,
     AssessmentUnavailable,
     AssessmentBlueprint,
@@ -20,9 +21,11 @@ from .assessments import (
     ResponseSaveResult,
     SessionCreateRequest,
     create_or_resume_session,
+    get_session_result,
     load_session,
     list_diagnostics,
     save_response,
+    submit_session,
 )
 from .content import ImportPreview, ImportPreviewRequest, SubjectSlug, preview_requested_exports
 from .content_import import ContentImportRequest, ContentImportResult, import_canonical_export
@@ -206,5 +209,54 @@ async def save_assessment_response(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except AssessmentNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AssessmentUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post(
+    "/v1/assessment-sessions/{session_id}/submit",
+    response_model=AssessmentResult,
+    tags=["assessments"],
+)
+async def submit_assessment_session(
+    session_id: str,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    user: CurrentUser = Depends(get_current_user),
+) -> AssessmentResult:
+    database_url = get_settings().database_url
+    if not database_url:
+        raise HTTPException(status_code=503, detail="API database is not configured")
+    try:
+        return await run_in_threadpool(
+            submit_session,
+            database_url,
+            user.id,
+            session_id,
+            idempotency_key or "",
+        )
+    except AssessmentConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except AssessmentNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AssessmentUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get(
+    "/v1/assessment-sessions/{session_id}/results",
+    response_model=AssessmentResult,
+    tags=["assessments"],
+)
+async def assessment_session_results(
+    session_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> AssessmentResult:
+    database_url = get_settings().database_url
+    if not database_url:
+        raise HTTPException(status_code=503, detail="API database is not configured")
+    try:
+        return await run_in_threadpool(get_session_result, database_url, user.id, session_id)
+    except AssessmentNotFound as exc:
+        raise HTTPException(status_code=404, detail="Assessment results were not found") from exc
     except AssessmentUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

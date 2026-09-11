@@ -107,3 +107,24 @@ def test_student_assessment_endpoints_require_a_configured_database() -> None:
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "request_failed"
+
+
+def test_submit_requires_a_configured_database() -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("ACT_API_ALLOW_TEST_USER", "true")
+    get_settings.cache_clear()
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/assessment-sessions/not-a-session/submit",
+                headers={
+                    "authorization": "Bearer prototype-test-token",
+                    "Idempotency-Key": "submit-test",
+                },
+            )
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "request_failed"

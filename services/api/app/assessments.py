@@ -73,6 +73,25 @@ class ResponseSaveResult(BaseModel):
     saved_at: datetime
 
 
+class ScoredItem(BaseModel):
+    session_item_id: str
+    question_id: str
+    choice_id: ChoiceId | None
+    correct: bool | None
+
+
+class AssessmentResult(BaseModel):
+    session_id: str
+    subject: SubjectSlug
+    purpose: Literal["diagnostic"]
+    correct: int = Field(ge=0)
+    answered: int = Field(ge=0)
+    total: int = Field(ge=0)
+    items: list[ScoredItem]
+    scoring_version: str
+    mastery_model_version: str
+
+
 class AssessmentConflict(Exception):
     pass
 
@@ -506,3 +525,253 @@ def save_response(
                 (Jsonb(result.model_dump(mode="json")), student_uuid, scope, idempotency_key),
             )
             return result
+
+
+def _result_from_score_details(
+    session_id: str,
+    subject: SubjectSlug,
+    scoring_version: str,
+    mastery_model_version: str,
+    score_details: Any,
+) -> AssessmentResult:
+    details = score_details if isinstance(score_details, dict) else {}
+    items = [ScoredItem.model_validate(item) for item in details.get("items", [])]
+    return AssessmentResult(
+        session_id=session_id,
+        subject=subject,
+        purpose="diagnostic",
+        correct=int(details.get("correct", 0)),
+        answered=int(details.get("answered", 0)),
+        total=int(details.get("total", len(items))),
+        items=items,
+        scoring_version=scoring_version,
+        mastery_model_version=mastery_model_version,
+    )
+
+
+def _result_hash(session_id: str) -> str:
+    return hashlib.sha256(f"assessment-submit:{session_id}".encode("utf-8")).hexdigest()
+
+
+def _load_result(
+    cursor: Any,
+    student_id: UUID,
+    session_id: str,
+    scoring_version: str | None = None,
+    mastery_model_version: str | None = None,
+) -> AssessmentResult:
+    try:
+        session_uuid = UUID(session_id)
+    except ValueError as exc:
+        raise AssessmentNotFound("Assessment session was not found") from exc
+    cursor.execute(
+        """
+        SELECT session_scores.score_details,
+               COALESCE(session_scores.scoring_version, blueprint.scoring_version),
+               blueprint.mastery_model_version, subject.slug
+        FROM assessment_sessions session
+        JOIN assessment_blueprints blueprint ON blueprint.id = session.blueprint_id
+        JOIN subjects subject ON subject.id = blueprint.subject_id
+        JOIN session_scores ON session_scores.session_id = session.id
+        WHERE session.id = %s AND session.student_id = %s
+        """,
+        (session_uuid, student_id),
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise AssessmentNotFound("Assessment results were not found")
+    return _result_from_score_details(
+        session_id,
+        row[3],
+        scoring_version or row[1],
+        mastery_model_version or row[2],
+        row[0],
+    )
+
+
+def submit_session(
+    database_url: str,
+    student_id: str,
+    session_id: str,
+    idempotency_key: str,
+) -> AssessmentResult:
+    if not idempotency_key.strip() or len(idempotency_key) > 255:
+        raise AssessmentConflict("An Idempotency-Key header is required")
+    student_uuid = _student_uuid(student_id)
+    try:
+        session_uuid = UUID(session_id)
+    except ValueError as exc:
+        raise AssessmentNotFound("Assessment session was not found") from exc
+
+    try:
+        import psycopg
+        from psycopg.types.json import Jsonb
+    except ImportError as exc:
+        raise AssessmentUnavailable("Database dependencies are unavailable") from exc
+
+    submission_hash = _result_hash(session_id)
+    with psycopg.connect(database_url) as connection:
+        with connection.cursor() as cursor:
+            scope = f"assessment-submit:{session_id}"
+            cursor.execute(
+                """
+                SELECT request_hash, status, response_body
+                FROM idempotency_keys
+                WHERE owner_id = %s AND scope = %s AND key = %s
+                FOR UPDATE
+                """,
+                (student_uuid, scope, idempotency_key),
+            )
+            idempotency_row = cursor.fetchone()
+            if idempotency_row:
+                if idempotency_row[0] != submission_hash:
+                    raise AssessmentConflict("Idempotency-Key was reused for a different request")
+                if idempotency_row[1] == "completed" and isinstance(idempotency_row[2], dict):
+                    return AssessmentResult.model_validate(idempotency_row[2])
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO idempotency_keys (owner_id, scope, key, request_hash)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (owner_id, scope, key) DO NOTHING
+                    """,
+                    (student_uuid, scope, idempotency_key, submission_hash),
+                )
+                cursor.execute(
+                    """
+                    SELECT request_hash, status, response_body
+                    FROM idempotency_keys
+                    WHERE owner_id = %s AND scope = %s AND key = %s
+                    FOR UPDATE
+                    """,
+                    (student_uuid, scope, idempotency_key),
+                )
+                idempotency_row = cursor.fetchone()
+                if not idempotency_row or idempotency_row[0] != submission_hash:
+                    raise AssessmentConflict("Idempotency-Key was reused for a different request")
+                if idempotency_row[1] == "completed" and isinstance(idempotency_row[2], dict):
+                    return AssessmentResult.model_validate(idempotency_row[2])
+
+            cursor.execute(
+                """
+                SELECT subject.slug, session.status::text,
+                       blueprint.scoring_version, blueprint.mastery_model_version
+                FROM assessment_sessions session
+                JOIN assessment_blueprints blueprint ON blueprint.id = session.blueprint_id
+                JOIN subjects subject ON subject.id = blueprint.subject_id
+                WHERE session.id = %s AND session.student_id = %s
+                FOR UPDATE
+                """,
+                (session_uuid, student_uuid),
+            )
+            session_row = cursor.fetchone()
+            if not session_row:
+                raise AssessmentNotFound("Assessment session was not found")
+            if session_row[1] == "scored":
+                result = _load_result(cursor, student_uuid, session_id)
+            elif session_row[1] not in {"created", "in_progress", "submitted", "scoring"}:
+                raise AssessmentConflict("Assessment session cannot be submitted")
+            else:
+                cursor.execute(
+                    """
+                    UPDATE assessment_sessions
+                    SET status = 'scoring', submitted_at = COALESCE(submitted_at, now())
+                    WHERE id = %s
+                    """,
+                    (session_uuid,),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO responses (session_item_id, student_id, is_omitted, client_revision, saved_at)
+                    SELECT item.id, %s, true, 0, now()
+                    FROM assessment_session_items item
+                    WHERE item.session_id = %s
+                      AND NOT EXISTS (
+                        SELECT 1 FROM responses response
+                        WHERE response.session_item_id = item.id
+                      )
+                    """,
+                    (student_uuid, session_uuid),
+                )
+                cursor.execute(
+                    """
+                    SELECT item.id, item.question_id, choice.label,
+                           response.is_omitted, (choice.id = correct_choice.id)
+                    FROM assessment_session_items item
+                    JOIN responses response ON response.session_item_id = item.id
+                    LEFT JOIN answer_choices choice ON choice.id = response.answer_choice_id
+                    JOIN answer_choices correct_choice
+                      ON correct_choice.question_id = item.question_id
+                     AND correct_choice.is_correct = true
+                    WHERE item.session_id = %s
+                    ORDER BY item.position
+                    """,
+                    (session_uuid,),
+                )
+                item_rows = cursor.fetchall()
+                items = [
+                    ScoredItem(
+                        session_item_id=str(row[0]),
+                        question_id=str(row[1]),
+                        choice_id=row[2] if row[2] in {"A", "B", "C", "D"} else None,
+                        correct=None if row[3] else bool(row[4]),
+                    )
+                    for row in item_rows
+                ]
+                result = AssessmentResult(
+                    session_id=session_id,
+                    subject=session_row[0],
+                    purpose="diagnostic",
+                    correct=sum(1 for item in items if item.correct is True),
+                    answered=sum(1 for item in items if item.choice_id is not None),
+                    total=len(items),
+                    items=items,
+                    scoring_version=session_row[2],
+                    mastery_model_version=session_row[3],
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO session_scores (session_id, raw_correct, raw_total, score_details, scoring_version)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (session_id) DO UPDATE SET raw_correct = EXCLUDED.raw_correct,
+                      raw_total = EXCLUDED.raw_total, score_details = EXCLUDED.score_details,
+                      scoring_version = EXCLUDED.scoring_version, created_at = now()
+                    """,
+                    (
+                        session_uuid,
+                        result.correct,
+                        result.total,
+                        Jsonb(result.model_dump(mode="json")),
+                        result.scoring_version,
+                    ),
+                )
+                cursor.execute(
+                    """
+                    UPDATE assessment_sessions
+                    SET status = 'scored', scored_at = now()
+                    WHERE id = %s
+                    """,
+                    (session_uuid,),
+                )
+
+            cursor.execute(
+                """
+                UPDATE idempotency_keys
+                SET status = 'completed', response_status = 200,
+                    response_body = %s, completed_at = now()
+                WHERE owner_id = %s AND scope = %s AND key = %s
+                """,
+                (Jsonb(result.model_dump(mode="json")), student_uuid, scope, idempotency_key),
+            )
+            return result
+
+
+def get_session_result(database_url: str, student_id: str, session_id: str) -> AssessmentResult:
+    try:
+        import psycopg
+    except ImportError as exc:
+        raise AssessmentUnavailable("Database dependencies are unavailable") from exc
+    student_uuid = _student_uuid(student_id)
+    with psycopg.connect(database_url) as connection:
+        with connection.cursor() as cursor:
+            return _load_result(cursor, student_uuid, session_id)

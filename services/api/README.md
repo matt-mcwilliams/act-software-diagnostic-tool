@@ -62,12 +62,16 @@ GET  /v1/diagnostics
 POST /v1/assessment-sessions
 GET  /v1/assessment-sessions/{session_id}
 PUT  /v1/assessment-sessions/{session_id}/responses/{session_item_id}
+POST /v1/assessment-sessions/{session_id}/submit
+GET  /v1/assessment-sessions/{session_id}/results
 ```
 
 Session items contain prompts and choices only. Response saves require an
 `Idempotency-Key` header and a monotonic `client_revision`; stale revisions
 return a conflict instead of overwriting newer work. New diagnostic sessions
-exclude questions already exposed to that student.
+exclude questions already exposed to that student. Submission finalizes
+omissions, persists a reproducible raw score, and requires its own
+`Idempotency-Key`.
 
 ## Domain migrations
 
