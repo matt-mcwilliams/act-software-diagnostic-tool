@@ -69,3 +69,22 @@ export function scoreAssessment(
     recommendations: buildRecommendations(skills, snapshots, inventory),
   };
 }
+
+export function scoreCycle(
+  subject: Subject,
+  diagnosticResponses: ResponseInput[],
+  reassessmentResponses: ResponseInput[],
+): AssessmentScore {
+  const diagnostic = scoreAssessment(subject, "diagnostic", diagnosticResponses);
+  const reassessment = scoreAssessment(subject, "reassessment", reassessmentResponses);
+  const evidence = [...diagnostic.evidence, ...reassessment.evidence];
+  const snapshots = getSkills(subject).map((skill) => calculateMastery(skill.id, evidence));
+  const inventory = new Set(getSkills(subject).map((skill) => skill.id));
+
+  return {
+    ...reassessment,
+    evidence,
+    snapshots,
+    recommendations: buildRecommendations(getSkills(subject), snapshots, inventory),
+  };
+}
