@@ -6,7 +6,7 @@ import hmac
 import re
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .content import SubjectSlug
 
@@ -17,6 +17,10 @@ class AnalyticsError(Exception):
 
 class AnalyticsNotFound(AnalyticsError):
     """The requested experiment has no registered pilot cohort."""
+
+
+class AnalyticsConflict(AnalyticsError):
+    """The requested pilot assignment conflicts with a frozen assignment."""
 
 
 class AnalyticsUnavailable(AnalyticsError):
@@ -42,6 +46,58 @@ class PilotExport(BaseModel):
     rows: list[PilotExportRow] = Field(default_factory=list)
 
 
+class ExperimentAssignmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    student_id: str = Field(min_length=1)
+    variant: str = Field(min_length=1, max_length=100)
+
+    @field_validator("student_id", "variant")
+    @classmethod
+    def non_blank_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("value must not be blank")
+        return value
+
+
+class ExperimentAssignment(BaseModel):
+    id: str
+    experiment_key: str
+    student_id: str
+    variant: str
+    assigned_at: datetime
+
+
+class TutorAssessmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    student_id: str = Field(min_length=1)
+    subject: SubjectSlug
+    skill_id: str = Field(min_length=1)
+    rating: int | None = Field(default=None, ge=1, le=5)
+    rank: int | None = Field(default=None, ge=1)
+    confidence: int | None = Field(default=None, ge=1, le=5)
+
+    @model_validator(mode="after")
+    def require_assessment_value(self) -> "TutorAssessmentRequest":
+        if self.rating is None and self.rank is None:
+            raise ValueError("rating or rank is required")
+        return self
+
+
+class TutorAssessment(BaseModel):
+    id: str
+    student_id: str
+    tutor_id: str
+    subject: SubjectSlug
+    skill_id: str
+    rating: int | None = None
+    rank: int | None = None
+    confidence: int | None = None
+    sealed_at: datetime
+
+
 _EXPERIMENT_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
 
@@ -62,6 +118,149 @@ def _connect(database_url: str | None) -> Any:
         return psycopg.connect(database_url)
     except Exception as exc:
         raise AnalyticsUnavailable("Analytics database is unavailable") from exc
+
+
+def _student_uuid(student_id: str) -> Any:
+    from uuid import UUID
+
+    try:
+        return UUID(student_id)
+    except (TypeError, ValueError) as exc:
+        raise AnalyticsUnavailable("The student ID is not a UUID") from exc
+
+
+def _tutor_uuid(tutor_id: str) -> Any:
+    from uuid import UUID
+
+    try:
+        return UUID(tutor_id)
+    except (TypeError, ValueError) as exc:
+        raise AnalyticsUnavailable("The tutor ID is not a UUID") from exc
+
+
+def assign_experiment(
+    database_url: str | None,
+    experiment_key: str,
+    payload: ExperimentAssignmentRequest,
+) -> ExperimentAssignment:
+    """Create a stable assignment or return the existing assignment."""
+
+    valid_key = _validate_experiment_key(experiment_key)
+    student_uuid = _student_uuid(payload.student_id)
+    try:
+        with _connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO experiment_assignments (student_id, experiment_key, variant)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (student_id, experiment_key) DO NOTHING
+                    RETURNING id, experiment_key, student_id, variant, assigned_at
+                    """,
+                    (student_uuid, valid_key, payload.variant),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    cursor.execute(
+                        """
+                        SELECT id, experiment_key, student_id, variant, assigned_at
+                        FROM experiment_assignments
+                        WHERE student_id = %s AND experiment_key = %s
+                        FOR SHARE
+                        """,
+                        (student_uuid, valid_key),
+                    )
+                    row = cursor.fetchone()
+                    if not row:
+                        raise AnalyticsUnavailable("Experiment assignment could not be loaded")
+                    if str(row[3]) != payload.variant:
+                        raise AnalyticsConflict("The student already has a different experiment variant")
+                return ExperimentAssignment(
+                    id=str(row[0]),
+                    experiment_key=str(row[1]),
+                    student_id=str(row[2]),
+                    variant=str(row[3]),
+                    assigned_at=row[4],
+                )
+    except AnalyticsError:
+        raise
+    except Exception as exc:
+        raise AnalyticsUnavailable("Experiment assignment could not be saved") from exc
+
+
+def capture_tutor_assessment(
+    database_url: str | None,
+    tutor_id: str,
+    payload: TutorAssessmentRequest,
+) -> TutorAssessment:
+    """Capture a sealed tutor estimate before student results are revealed."""
+
+    tutor_uuid = _tutor_uuid(tutor_id)
+    student_uuid = _student_uuid(payload.student_id)
+    try:
+        from uuid import UUID
+
+        skill_uuid = UUID(payload.skill_id)
+    except (TypeError, ValueError) as exc:
+        raise AnalyticsNotFound("Tutor assessment skill was not found") from exc
+    try:
+        with _connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT skill.id, subject.slug
+                    FROM skills skill
+                    JOIN taxonomy_versions taxonomy ON taxonomy.id = skill.taxonomy_version_id
+                    JOIN subjects subject ON subject.id = taxonomy.subject_id
+                    WHERE skill.id = %s AND subject.slug = %s
+                    """,
+                    (skill_uuid, payload.subject),
+                )
+                skill_row = cursor.fetchone()
+                if not skill_row:
+                    raise AnalyticsNotFound("Tutor assessment skill was not found")
+                cursor.execute(
+                    """
+                    INSERT INTO tutor_skill_assessments
+                      (student_id, tutor_id, subject_id, taxonomy_version_id,
+                       skill_id, rating, rank, confidence, sealed_at)
+                    SELECT %s, %s, subject.id, skill.taxonomy_version_id,
+                           skill.id, %s, %s, %s, now()
+                    FROM skills skill
+                    JOIN taxonomy_versions taxonomy ON taxonomy.id = skill.taxonomy_version_id
+                    JOIN subjects subject ON subject.id = taxonomy.subject_id
+                    WHERE skill.id = %s AND subject.slug = %s
+                    RETURNING id, student_id, tutor_id, skill_id,
+                              rating, rank, confidence, sealed_at
+                    """,
+                    (
+                        student_uuid,
+                        tutor_uuid,
+                        payload.rating,
+                        payload.rank,
+                        payload.confidence,
+                        skill_uuid,
+                        payload.subject,
+                    ),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    raise AnalyticsUnavailable("Tutor assessment could not be saved")
+                return TutorAssessment(
+                    id=str(row[0]),
+                    student_id=str(row[1]),
+                    tutor_id=str(row[2]),
+                    subject=payload.subject,
+                    skill_id=str(row[3]),
+                    rating=int(row[4]) if row[4] is not None else None,
+                    rank=int(row[5]) if row[5] is not None else None,
+                    confidence=int(row[6]) if row[6] is not None else None,
+                    sealed_at=row[7],
+                )
+    except AnalyticsError:
+        raise
+    except Exception as exc:
+        raise AnalyticsUnavailable("Tutor assessment could not be saved") from exc
 
 
 def _pilot_id(student_id: Any, secret: str) -> str:
@@ -204,9 +403,16 @@ def export_pilot_data(
 
 __all__ = [
     "AnalyticsError",
+    "AnalyticsConflict",
     "AnalyticsNotFound",
     "AnalyticsUnavailable",
+    "ExperimentAssignment",
+    "ExperimentAssignmentRequest",
     "PilotExport",
     "PilotExportRow",
+    "TutorAssessment",
+    "TutorAssessmentRequest",
+    "assign_experiment",
+    "capture_tutor_assessment",
     "export_pilot_data",
 ]

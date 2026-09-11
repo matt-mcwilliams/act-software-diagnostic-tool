@@ -11,10 +11,17 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .auth import CurrentUser, get_current_user, require_reviewer
 from .analytics import (
+    AnalyticsConflict,
     AnalyticsError,
+    ExperimentAssignment,
+    ExperimentAssignmentRequest,
     AnalyticsNotFound,
     AnalyticsUnavailable,
     PilotExport,
+    TutorAssessment,
+    TutorAssessmentRequest,
+    assign_experiment,
+    capture_tutor_assessment,
     export_pilot_data,
 )
 from .assessments import (
@@ -371,9 +378,18 @@ def _issue_http_error(exc: IssueError) -> HTTPException:
 def _analytics_http_error(exc: AnalyticsError) -> HTTPException:
     if isinstance(exc, AnalyticsNotFound):
         return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, AnalyticsConflict):
+        return HTTPException(status_code=409, detail=str(exc))
     if isinstance(exc, AnalyticsUnavailable):
         return HTTPException(status_code=503, detail=str(exc))
     return HTTPException(status_code=503, detail="Pilot export could not be generated")
+
+
+def _analytics_database_url() -> str:
+    database_url = get_settings().database_url
+    if not database_url:
+        raise HTTPException(status_code=503, detail="API database is not configured")
+    return database_url
 
 
 def _content_review_http_error(exc: ContentReviewError) -> HTTPException:
@@ -426,14 +442,53 @@ async def experiment_export(
     _: CurrentUser = Depends(require_reviewer),
 ) -> PilotExport:
     settings = get_settings()
-    if not settings.database_url:
-        raise HTTPException(status_code=503, detail="API database is not configured")
     try:
         return await run_in_threadpool(
             export_pilot_data,
-            settings.database_url,
+            _analytics_database_url(),
             settings.export_pseudonym_secret,
             experiment_key,
+        )
+    except AnalyticsError as exc:
+        raise _analytics_http_error(exc) from exc
+
+
+@app.post(
+    "/v1/internal/experiments/{experiment_key}/assignments",
+    response_model=ExperimentAssignment,
+    tags=["internal-analytics"],
+)
+async def experiment_assignment(
+    experiment_key: str,
+    payload: ExperimentAssignmentRequest,
+    _: CurrentUser = Depends(require_reviewer),
+) -> ExperimentAssignment:
+    try:
+        return await run_in_threadpool(
+            assign_experiment,
+            _analytics_database_url(),
+            experiment_key,
+            payload,
+        )
+    except AnalyticsError as exc:
+        raise _analytics_http_error(exc) from exc
+
+
+@app.post(
+    "/v1/internal/tutor-assessments",
+    response_model=TutorAssessment,
+    tags=["internal-analytics"],
+)
+async def tutor_assessment(
+    payload: TutorAssessmentRequest,
+    user: CurrentUser = Depends(require_reviewer),
+) -> TutorAssessment:
+    try:
+        return await run_in_threadpool(
+            capture_tutor_assessment,
+            _analytics_database_url(),
+            user.id,
+            payload,
         )
     except AnalyticsError as exc:
         raise _analytics_http_error(exc) from exc

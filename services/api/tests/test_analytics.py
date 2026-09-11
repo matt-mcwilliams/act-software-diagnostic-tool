@@ -5,8 +5,10 @@ from pydantic import ValidationError
 
 from app.analytics import (
     AnalyticsNotFound,
+    ExperimentAssignmentRequest,
     PilotExport,
     PilotExportRow,
+    TutorAssessmentRequest,
     _pilot_id,
     _validate_experiment_key,
 )
@@ -61,3 +63,26 @@ def test_export_shape_contains_no_direct_identity_or_answer_fields() -> None:
     assert "email" not in serialized
     assert "answer_key" not in serialized
     assert "correct_answer" not in serialized
+
+
+def test_pilot_capture_requests_are_strict_and_require_a_tutor_signal() -> None:
+    assignment = ExperimentAssignmentRequest(
+        student_id="00000000-0000-0000-0000-000000000001",
+        variant="  control ",
+    )
+    tutor_assessment = TutorAssessmentRequest(
+        student_id="00000000-0000-0000-0000-000000000001",
+        subject="math",
+        skill_id="00000000-0000-0000-0000-000000000002",
+        rating=3,
+        confidence=4,
+    )
+
+    assert assignment.variant == "control"
+    assert tutor_assessment.rating == 3
+    with pytest.raises(ValidationError):
+        TutorAssessmentRequest(
+            student_id="00000000-0000-0000-0000-000000000001",
+            subject="math",
+            skill_id="00000000-0000-0000-0000-000000000002",
+        )
