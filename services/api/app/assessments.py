@@ -110,6 +110,14 @@ class AssessmentNotFound(Exception):
     pass
 
 
+def _remediation_status_for_classification(classification: str) -> str:
+    if classification in {"strong_evidence_of_mastery", "likely_mastered"}:
+        return "mastered"
+    if classification == "insufficient_evidence":
+        return "needs_more_evidence"
+    return "repeat_recommended"
+
+
 def _student_uuid(student_id: str) -> UUID:
     try:
         return UUID(student_id)
@@ -761,6 +769,48 @@ def submit_session(
                         session_row[4],
                         source_purpose=session_row[1],
                     )
+                    if session_row[1] == "reassessment":
+                        cursor.execute(
+                            """
+                            SELECT cycle.id
+                            FROM reassessment_links link
+                            JOIN remediation_cycles cycle ON cycle.id = link.cycle_id
+                            WHERE link.assessment_session_id = %s
+                              AND cycle.student_id = %s
+                            FOR UPDATE OF cycle
+                            """,
+                            (session_uuid, student_uuid),
+                        )
+                        cycle_row = cursor.fetchone()
+                        if cycle_row:
+                            cursor.execute(
+                                """
+                                SELECT cycle.skill_id
+                                FROM remediation_cycles cycle
+                                WHERE cycle.id = %s
+                                """,
+                                (cycle_row[0],),
+                            )
+                            cycle_skill_row = cursor.fetchone()
+                            target_snapshot = next(
+                                (
+                                    snapshot
+                                    for snapshot in snapshots
+                                    if cycle_skill_row and snapshot.skill_id == str(cycle_skill_row[0])
+                                ),
+                                None,
+                            )
+                            next_status = _remediation_status_for_classification(
+                                target_snapshot.classification if target_snapshot else "insufficient_evidence"
+                            )
+                            cursor.execute(
+                                """
+                                UPDATE remediation_cycles
+                                SET status = %s, completed_at = now()
+                                WHERE id = %s AND student_id = %s
+                                """,
+                                (next_status, cycle_row[0], student_uuid),
+                            )
                 result = result.model_copy(update={
                     "snapshots": snapshots,
                     "recommendations": recommendations,

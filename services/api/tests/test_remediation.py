@@ -4,7 +4,12 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.assessments import AssessmentItem, AssessmentSession, PublicChoice
+from app.assessments import (
+    AssessmentItem,
+    AssessmentSession,
+    PublicChoice,
+    _remediation_status_for_classification,
+)
 from app.remediation import (
     LearningResource,
     PracticeSet,
@@ -104,3 +109,16 @@ def test_learning_resource_is_public_metadata_only() -> None:
 def test_invalid_authenticated_identity_is_unavailable() -> None:
     with pytest.raises(RemediationUnavailable):
         _student_uuid("not-a-uuid")
+
+
+@pytest.mark.parametrize(
+    ("classification", "expected"),
+    [
+        ("strong_evidence_of_mastery", "mastered"),
+        ("likely_mastered", "mastered"),
+        ("insufficient_evidence", "needs_more_evidence"),
+        ("developing", "repeat_recommended"),
+    ],
+)
+def test_reassessment_classification_maps_to_cycle_outcome(classification: str, expected: str) -> None:
+    assert _remediation_status_for_classification(classification) == expected
