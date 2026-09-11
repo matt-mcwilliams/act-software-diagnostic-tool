@@ -48,6 +48,8 @@ test("a student can complete the English diagnose-to-reassess loop", async ({ pa
   await page.getByRole("button", { name: "Next question" }).click();
   await page.getByRole("radio").first().click();
   await page.getByRole("button", { name: "Continue to reassessment" }).click();
+  await expect(page.getByText("Practice complete")).toBeVisible();
+  await page.getByRole("link", { name: "Start reassessment" }).click();
   await page.waitForURL("**/reassess/english/**");
   await expect(page.getByText("Feedback will appear after you submit the set.")).toBeVisible();
 
@@ -57,6 +59,9 @@ test("a student can complete the English diagnose-to-reassess loop", async ({ pa
   await page.getByRole("button", { name: "Submit reassessment" }).click();
   await expect(page.getByText("Your evidence has been updated.")).toBeVisible();
   await expect(page.getByText("Current skill estimate")).toBeVisible();
+  await page.getByRole("link", { name: "Review priorities" }).click();
+  await page.waitForURL("**/results/english");
+  await expect(page.getByText("Targets below include your latest completed reassessment.")).toBeVisible();
 });
 
 test("diagnostic content does not include answer keys", async ({ request }) => {

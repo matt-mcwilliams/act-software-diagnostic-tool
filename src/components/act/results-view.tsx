@@ -7,11 +7,10 @@ import { useEffect, useState } from "react";
 import { PageFrame } from "@/components/act/page-frame";
 import { StatusLabel } from "@/components/act/status-label";
 import { readSession } from "@/lib/act/prototype-state";
-import type { AssessmentScore } from "@/lib/act/scoring";
 import type { Skill, Subject } from "@/lib/act/types";
 
 export function ResultsView({ subject }: { subject: Subject }) {
-  const [score] = useState<AssessmentScore | null>(() => readSession(subject, subject).score ?? null);
+  const [session] = useState(() => readSession(subject, subject));
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,6 +20,9 @@ export function ResultsView({ subject }: { subject: Subject }) {
       .then(({ skills: loadedSkills }) => setSkills(loadedSkills))
       .finally(() => setLoading(false));
   }, [subject]);
+
+  const latestCycleScore = Object.values(session.cycleScores).at(-1);
+  const score = latestCycleScore ?? session.score ?? null;
 
   if (loading) return <Message>Loading your results…</Message>;
   if (!score) {
@@ -46,8 +48,9 @@ export function ResultsView({ subject }: { subject: Subject }) {
 
       <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-sm text-slate-600">Diagnostic summary</p>
-        <p className="mt-2 text-2xl font-semibold text-slate-950">{score.correct} of {score.total} correct</p>
+        <p className="mt-2 text-2xl font-semibold text-slate-950">{session.score?.correct ?? score.correct} of {session.score?.total ?? score.total} correct</p>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">These results describe the evidence from this short diagnostic. They are a starting point for choosing what to study, not an official ACT score.</p>
+        {latestCycleScore ? <p className="mt-3 text-xs font-medium text-emerald-800">Targets below include your latest completed reassessment.</p> : null}
       </div>
 
       <section className="mt-10">
