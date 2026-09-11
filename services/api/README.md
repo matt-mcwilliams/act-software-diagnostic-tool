@@ -1,8 +1,9 @@
 # ACT Adaptive API
 
-This is the planned FastAPI domain boundary. It currently provides the
-operational endpoints and authenticated current-user contract needed before
-assessment and content writes move out of the Next.js prototype.
+This is the FastAPI domain boundary. It provides operational/authentication
+contracts, reviewer-only canonical content import, and the first PostgreSQL-
+backed assessment session contract. The Next.js browser flow remains in
+prototype mode until it is connected to these domain endpoints.
 
 ## Local development
 
@@ -59,6 +60,7 @@ approved blueprint and approved, rights-cleared question inventory:
 ```text
 GET  /v1/diagnostics
 POST /v1/assessment-sessions
+GET  /v1/assessment-sessions/{session_id}
 PUT  /v1/assessment-sessions/{session_id}/responses/{session_item_id}
 ```
 

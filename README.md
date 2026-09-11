@@ -21,6 +21,10 @@ complexity.
   config is present; otherwise the app clearly runs in prototype mode.
 - Optional server-to-server FastAPI `/v1/me` verification when
   `ACT_API_BASE_URL` is configured alongside Supabase.
+- Reviewer-only canonical import preview and draft import endpoints with
+  source-hash audit records.
+- Authenticated FastAPI diagnostic catalog, session start/resume, and
+  answer-key-free response-save contract with exposure and idempotency rules.
 - FastAPI operational/authentication foundation at `services/api/`.
 - PostgreSQL domain schema migration for versioned content, assessment facts,
   mastery evidence, remediation cycles, generated-content review, and pilot
@@ -33,9 +37,11 @@ complexity.
 The student flow currently stores session state in `localStorage`, and the
 demo question bank is authored prototype content mapped to IDs from the
 canonical taxonomy exports. It is not official ACT score-equivalent content.
-The FastAPI service is not yet the browser flow's persistence backend; it
-currently establishes the service boundary, health/readiness endpoints, and
-`/v1/me` authentication contract.
+The FastAPI service is not yet wired into the browser flow's persistence path;
+the browser still uses local prototype routes. FastAPI now owns the planned
+domain boundary for canonical imports and has the first PostgreSQL-backed
+assessment session contract, which requires approved database content before
+it can serve a student session.
 
 ## Local setup
 
@@ -82,7 +88,7 @@ docs/adr/                 Architecture decisions
 
 ## Pilot work still required
 
-Before a real pilot, move assessment and remediation writes to FastAPI/PostgreSQL,
-add durable exposure/idempotency handling, import reviewed content into the
-canonical tables, add internal review/export tools, and complete the privacy,
+Before a real pilot, connect the student UI to the FastAPI session contract,
+add submit/scoring/mastery/remediation writes, approve a reviewed blueprint
+and inventory, add internal review/export tools, and complete the privacy,
 rights, accessibility, and backup/restore gates in `plan.md`.
