@@ -19,6 +19,8 @@ complexity.
 - Combined diagnostic + reassessment evidence with a minimal progress view.
 - Supabase magic-link sign-in boundary that activates when public Supabase
   config is present; otherwise the app clearly runs in prototype mode.
+- Optional server-to-server FastAPI `/v1/me` verification when
+  `ACT_API_BASE_URL` is configured alongside Supabase.
 - FastAPI operational/authentication foundation at `services/api/`.
 - PostgreSQL domain schema migration for versioned content, assessment facts,
   mastery evidence, remediation cycles, generated-content review, and pilot
@@ -44,8 +46,9 @@ pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). Add Supabase variables to
-`.env.local` to enable magic-link access. Without them, choose “Continue in
-prototype mode” on `/sign-in`.
+`.env.local` to enable magic-link access. Set `ACT_API_BASE_URL` as well when
+the configured pilot should verify the user with FastAPI. Without Supabase
+variables, choose “Continue in prototype mode” on `/sign-in`.
 
 ## Commands
 

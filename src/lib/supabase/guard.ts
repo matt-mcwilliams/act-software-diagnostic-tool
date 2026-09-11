@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { verifyFastApiUser } from "@/lib/api/client";
+
 import { getOptionalSupabaseConfig } from "./env";
 import { createClient } from "./server";
 
@@ -13,5 +15,11 @@ export async function requirePilotUser() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/sign-in");
+
+  if (process.env.ACT_API_BASE_URL) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    await verifyFastApiUser(sessionData.session?.access_token);
+  }
+
   return data.user;
 }
