@@ -9,3 +9,9 @@ Apply these migrations in filename order with the service's migration runner
 once it is connected to the pilot database. They are intentionally separate
 from the Next.js web schema so there is one owner for assessment, content,
 mastery, remediation, and analytics writes.
+
+The first domain migration also creates the retry primitives used by future
+session mutations: one open assessment per student/blueprint and scoped
+`idempotency_keys` containing a request hash plus the completed response. A
+mutation must return the stored response for the same owner/scope/key, and
+must reject a reused key whose request hash differs.

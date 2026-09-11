@@ -170,6 +170,10 @@ CREATE TABLE assessment_sessions (
 
 CREATE INDEX assessment_sessions_student_status_idx ON assessment_sessions(student_id, status);
 
+CREATE UNIQUE INDEX one_open_assessment_per_blueprint
+  ON assessment_sessions(student_id, blueprint_id)
+  WHERE status IN ('created', 'in_progress');
+
 CREATE TABLE assessment_session_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id uuid NOT NULL REFERENCES assessment_sessions(id),
@@ -206,6 +210,26 @@ CREATE TABLE response_events (
   payload jsonb NOT NULL DEFAULT '{}'::jsonb,
   occurred_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE TABLE idempotency_keys (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id uuid NOT NULL,
+  scope text NOT NULL,
+  key text NOT NULL CHECK (length(key) BETWEEN 1 AND 255),
+  request_hash text NOT NULL,
+  status text NOT NULL DEFAULT 'in_progress'
+    CHECK (status IN ('in_progress', 'completed', 'failed')),
+  response_status integer CHECK (response_status IS NULL OR response_status BETWEEN 200 AND 599),
+  response_body jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  expires_at timestamptz,
+  UNIQUE (owner_id, scope, key),
+  CHECK (status <> 'completed' OR response_status IS NOT NULL),
+  CHECK (status <> 'completed' OR completed_at IS NOT NULL)
+);
+
+CREATE INDEX idempotency_keys_expiry_idx ON idempotency_keys(expires_at);
 
 CREATE TABLE item_exposures (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

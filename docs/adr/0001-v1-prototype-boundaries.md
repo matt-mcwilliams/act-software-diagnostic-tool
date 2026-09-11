@@ -33,6 +33,8 @@ later move domain writes behind a FastAPI service.
    recommendation ranking uses the version labels in `src/lib/act/engine.ts`.
    Both are replaceable, and stored evidence—not a mutable percentage—is the
    intended long-term source of truth.
+7. Domain mutations will use scoped idempotency keys and a unique open-session
+   rule so retries and repeated starts cannot create duplicate assessment work.
 
 ## Consequences
 
