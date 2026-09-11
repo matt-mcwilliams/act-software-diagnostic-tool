@@ -53,6 +53,19 @@ curl -X POST http://127.0.0.1:8000/v1/internal/imports \
 Imports are source-hash idempotent and create draft/pending-review content.
 They do not make raw canonical content assignable or expose it in the result.
 
+Student assessment endpoints are enabled only when PostgreSQL contains an
+approved blueprint and approved, rights-cleared question inventory:
+
+```text
+GET  /v1/diagnostics
+POST /v1/assessment-sessions
+PUT  /v1/assessment-sessions/{session_id}/responses/{session_item_id}
+```
+
+Session items contain prompts and choices only. Response saves require an
+`Idempotency-Key` header and a monotonic `client_revision`; stale revisions
+return a conflict instead of overwriting newer work.
+
 ## Domain migrations
 
 The FastAPI service owns the domain migration history. Preview the migration

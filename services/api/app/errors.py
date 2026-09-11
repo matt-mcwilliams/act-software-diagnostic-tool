@@ -26,6 +26,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
         401: "unauthorized",
         403: "forbidden",
         404: "not_found",
+        409: "conflict",
         422: "validation_error",
     }.get(exc.status_code, "request_failed")
     return JSONResponse(

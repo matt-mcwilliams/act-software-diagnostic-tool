@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.auth import CurrentUser, get_current_user
@@ -85,6 +86,24 @@ def test_content_import_requires_a_configured_database() -> None:
             )
     finally:
         app.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "request_failed"
+
+
+def test_student_assessment_endpoints_require_a_configured_database() -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("ACT_API_ALLOW_TEST_USER", "true")
+    get_settings.cache_clear()
+    try:
+        with TestClient(app) as client:
+            response = client.get(
+                "/v1/diagnostics",
+                headers={"authorization": "Bearer prototype-test-token"},
+            )
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "request_failed"
