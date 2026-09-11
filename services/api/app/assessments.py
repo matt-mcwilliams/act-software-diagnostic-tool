@@ -9,7 +9,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from .content import SubjectSlug
 
 ChoiceId = Literal["A", "B", "C", "D"]
-SessionStatus = Literal["created", "in_progress"]
+SessionStatus = Literal[
+    "created",
+    "in_progress",
+    "submitted",
+    "scoring",
+    "scored",
+    "expired",
+    "abandoned",
+    "failed",
+]
 
 
 class AssessmentBlueprint(BaseModel):
