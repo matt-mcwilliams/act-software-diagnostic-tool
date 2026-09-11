@@ -8,6 +8,7 @@ function buildTargetPath(segments: string[]) {
   if (segments.length === 1 && segments[0] === "cycles") return "/v1/remediation-cycles";
   if (segments.length === 1 && segments[0] === "practice-sets") return "/v1/practice-sets";
   if (segments.length === 1 && segments[0] === "mastery") return "/v1/mastery";
+  if (segments.length === 1 && segments[0] === "issues") return "/v1/issue-reports";
   if (segments.length === 2 && segments[0] === "sessions") {
     return `/v1/assessment-sessions/${encodeURIComponent(segments[1])}`;
   }

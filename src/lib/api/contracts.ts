@@ -135,6 +135,16 @@ export interface FastApiSkillHistory {
   snapshots: FastApiMasterySnapshot[];
 }
 
+export interface FastApiIssueReport {
+  id: string;
+  entity_type: "diagnosis" | "question" | "resource" | "explanation";
+  entity_id: string;
+  category: string;
+  description: string;
+  status: "open" | "in_review" | "resolved" | "dismissed";
+  created_at: string;
+}
+
 export interface FastApiRemediationCycleSummary {
   id: string;
   subject: "english" | "math";
