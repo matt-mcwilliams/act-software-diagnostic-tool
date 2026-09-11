@@ -20,3 +20,6 @@ Migration `0002` records each canonical-content import batch by source hash,
 taxonomy/schema version, row counts, warnings, and lifecycle status. Imported
 canonical exports remain non-assignable until their review and rights gates
 are cleared.
+
+Migration `0003` gives each source artifact a stable `(source_type, name,
+version)` identity so the importer can use conflict-safe upserts.
