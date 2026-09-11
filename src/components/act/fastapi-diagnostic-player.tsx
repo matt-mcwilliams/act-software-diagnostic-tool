@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type {
-  FastApiAssessmentItem,
   FastApiAssessmentSession,
   FastApiChoiceId,
 } from "@/lib/api/contracts";
@@ -26,7 +25,6 @@ export function FastApiDiagnosticPlayer({ subject }: { subject: Subject }) {
   const router = useRouter();
   const [session, setSession] = useState<FastApiAssessmentSession | null>(null);
   const [answers, setAnswers] = useState<Record<string, FastApiChoiceId>>({});
-  const [revisions, setRevisions] = useState<Record<string, number>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [saveState, setSaveState] = useState<"saving" | "saved" | "error">("saved");
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "submitting">("loading");
@@ -65,7 +63,6 @@ export function FastApiDiagnosticPlayer({ subject }: { subject: Subject }) {
         revisionsRef.current = loadedSession.revisions ?? {};
         setSession(loadedSession);
         setAnswers(answersRef.current);
-        setRevisions(revisionsRef.current);
         window.localStorage.setItem(sessionKey(subject), loadedSession.id);
         setStatus("ready");
       })
@@ -91,7 +88,6 @@ export function FastApiDiagnosticPlayer({ subject }: { subject: Subject }) {
     answersRef.current = nextAnswers;
     revisionsRef.current = { ...revisionsRef.current, [question.id]: revision };
     setAnswers(nextAnswers);
-    setRevisions(revisionsRef.current);
     setSaveState("saving");
     setError("");
 
@@ -111,7 +107,6 @@ export function FastApiDiagnosticPlayer({ subject }: { subject: Subject }) {
         if (!response.ok) throw new Error(await responseError(response, "Your answer could not be saved."));
         const saved = await response.json() as { client_revision: number };
         revisionsRef.current = { ...revisionsRef.current, [question.id]: saved.client_revision };
-        setRevisions(revisionsRef.current);
         setSaveState("saved");
       })
       .catch((saveError: unknown) => {
