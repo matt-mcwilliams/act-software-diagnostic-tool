@@ -51,6 +51,17 @@ from .remediation import (
     get_remediation_cycle,
     record_resource_event,
 )
+from .progress import (
+    MasteryHistory,
+    MasteryOverview,
+    ProgressError,
+    ProgressNotFound,
+    ProgressUnavailable,
+    RemediationCycleSummary,
+    get_mastery_history,
+    list_mastery,
+    list_remediation_cycles,
+)
 from .settings import get_settings
 
 logger = logging.getLogger("act_adaptive_api")
@@ -296,6 +307,79 @@ def _remediation_http_error(exc: RemediationError) -> HTTPException:
     if isinstance(exc, RemediationConflict):
         return HTTPException(status_code=409, detail=str(exc))
     return HTTPException(status_code=503, detail=str(exc))
+
+
+def _progress_database_url() -> str:
+    database_url = get_settings().database_url
+    if not database_url:
+        raise HTTPException(status_code=503, detail="API database is not configured")
+    return database_url
+
+
+def _progress_http_error(exc: ProgressError) -> HTTPException:
+    if isinstance(exc, ProgressNotFound):
+        return HTTPException(status_code=404, detail=str(exc))
+    return HTTPException(status_code=503, detail=str(exc))
+
+
+@app.get(
+    "/v1/mastery",
+    response_model=MasteryOverview,
+    tags=["progress"],
+)
+async def mastery_overview(
+    subject: SubjectSlug | None = None,
+    user: CurrentUser = Depends(get_current_user),
+) -> MasteryOverview:
+    try:
+        return await run_in_threadpool(
+            list_mastery,
+            _progress_database_url(),
+            user.id,
+            subject,
+        )
+    except ProgressError as exc:
+        raise _progress_http_error(exc) from exc
+
+
+@app.get(
+    "/v1/mastery/{skill_id}/history",
+    response_model=MasteryHistory,
+    tags=["progress"],
+)
+async def mastery_history(
+    skill_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> MasteryHistory:
+    try:
+        return await run_in_threadpool(
+            get_mastery_history,
+            _progress_database_url(),
+            user.id,
+            skill_id,
+        )
+    except ProgressError as exc:
+        raise _progress_http_error(exc) from exc
+
+
+@app.get(
+    "/v1/remediation-cycles",
+    response_model=list[RemediationCycleSummary],
+    tags=["progress"],
+)
+async def remediation_cycle_history(
+    subject: SubjectSlug | None = None,
+    user: CurrentUser = Depends(get_current_user),
+) -> list[RemediationCycleSummary]:
+    try:
+        return await run_in_threadpool(
+            list_remediation_cycles,
+            _progress_database_url(),
+            user.id,
+            subject,
+        )
+    except ProgressError as exc:
+        raise _progress_http_error(exc) from exc
 
 
 @app.post(
