@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PageFrame } from "@/components/act/page-frame";
 import { readSession, responseEntries, writeSession } from "@/lib/act/prototype-state";
@@ -12,6 +12,7 @@ import { StatusLabel } from "./status-label";
 export function ReassessmentView({ subject, skillId }: { subject: Subject; skillId: string }) {
   const [questions, setQuestions] = useState<PublicQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, ChoiceId>>(() => readSession(subject, subject).reassessmentAnswers);
+  const answersRef = useRef(answers);
   const [result, setResult] = useState<AssessmentScore | null>(() => readSession(subject, subject).cycleScores[skillId] ?? null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -39,6 +40,7 @@ export function ReassessmentView({ subject, skillId }: { subject: Subject; skill
 
   function choose(choiceId: ChoiceId) {
     const nextAnswers = { ...answers, [question.id]: choiceId };
+    answersRef.current = nextAnswers;
     setAnswers(nextAnswers);
     const session = readSession(subject, subject);
     writeSession({ ...session, reassessmentAnswers: nextAnswers });
@@ -55,7 +57,7 @@ export function ReassessmentView({ subject, skillId }: { subject: Subject; skill
       body: JSON.stringify({
         subject,
         diagnosticResponses: responseEntries(session.answers),
-        reassessmentResponses: questions.map((item) => ({ questionId: item.id, choiceId: answers[item.id] ?? null })),
+        reassessmentResponses: questions.map((item) => ({ questionId: item.id, choiceId: answersRef.current[item.id] ?? null })),
       }),
     }).catch(() => null);
 
@@ -66,7 +68,7 @@ export function ReassessmentView({ subject, skillId }: { subject: Subject; skill
     }
 
     const nextResult = (await response.json()) as AssessmentScore;
-    writeSession({ ...readSession(subject, subject), reassessmentAnswers: answers, cycleScores: { ...session.cycleScores, [skillId]: nextResult } });
+    writeSession({ ...readSession(subject, subject), reassessmentAnswers: answersRef.current, cycleScores: { ...session.cycleScores, [skillId]: nextResult } });
     setResult(nextResult);
     setSubmitting(false);
   }

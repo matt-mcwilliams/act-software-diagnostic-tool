@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PageFrame } from "@/components/act/page-frame";
 import { readSession, writeSession } from "@/lib/act/prototype-state";
@@ -17,6 +17,7 @@ interface Feedback {
 export function PracticeView({ subject, skillId }: { subject: Subject; skillId: string }) {
   const [questions, setQuestions] = useState<PublicQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, ChoiceId>>({});
+  const answersRef = useRef(answers);
   const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -41,7 +42,9 @@ export function PracticeView({ subject, skillId }: { subject: Subject; skillId: 
   const currentFeedback = feedback[question.id];
 
   async function choose(choiceId: ChoiceId) {
-    setAnswers((current) => ({ ...current, [question.id]: choiceId }));
+    const nextAnswers = { ...answersRef.current, [question.id]: choiceId };
+    answersRef.current = nextAnswers;
+    setAnswers(nextAnswers);
     setError("");
     try {
       const response = await fetch("/api/prototype/answer", {
@@ -58,7 +61,7 @@ export function PracticeView({ subject, skillId }: { subject: Subject; skillId: 
   }
 
   function finish() {
-    if (Object.keys(answers).length < questions.length) {
+    if (Object.keys(answersRef.current).length < questions.length) {
       setError("Answer each practice question before continuing to reassessment.");
       return;
     }
@@ -101,7 +104,7 @@ export function PracticeView({ subject, skillId }: { subject: Subject; skillId: 
             const isCorrect = currentFeedback?.correctChoiceId === choice.id;
             const isWrong = selected && currentFeedback && !currentFeedback.correct;
             return (
-              <button key={choice.id} type="button" onClick={() => choose(choice.id)} className={`flex w-full items-start gap-3 rounded-lg border p-4 text-left text-sm leading-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 ${isCorrect ? "border-emerald-700 bg-emerald-50" : isWrong ? "border-amber-400 bg-amber-50" : selected ? "border-slate-500 bg-slate-50" : "border-slate-200 hover:border-slate-400 hover:bg-slate-50"}`}>
+              <button key={choice.id} type="button" role="radio" aria-checked={selected} onClick={() => choose(choice.id)} className={`flex w-full items-start gap-3 rounded-lg border p-4 text-left text-sm leading-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 ${isCorrect ? "border-emerald-700 bg-emerald-50" : isWrong ? "border-amber-400 bg-amber-50" : selected ? "border-slate-500 bg-slate-50" : "border-slate-200 hover:border-slate-400 hover:bg-slate-50"}`}>
                 <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-slate-300 text-xs font-semibold">{choice.id}</span>
                 <span>{choice.text}</span>
               </button>

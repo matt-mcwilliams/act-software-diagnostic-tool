@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
 
 import { readSession, writeSession } from "@/lib/act/prototype-state";
@@ -15,6 +16,7 @@ export function DiagnosticPlayer({ subject }: DiagnosticPlayerProps) {
   const router = useRouter();
   const [questions, setQuestions] = useState<PublicQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, ChoiceId>>(() => readSession(subject, subject).answers);
+  const answersRef = useRef(answers);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [saveState, setSaveState] = useState<"saving" | "saved" | "offline">("saved");
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "submitting">("loading");
@@ -44,6 +46,7 @@ export function DiagnosticPlayer({ subject }: DiagnosticPlayerProps) {
     if (!question || session.status === "submitted") return;
     setSaveState("saving");
     const nextAnswers = { ...answers, [question.id]: choiceId };
+    answersRef.current = nextAnswers;
     setAnswers(nextAnswers);
     writeSession({ ...readSession(subject, subject), answers: nextAnswers, status: "in_progress" });
     setSaveState("saved");
@@ -53,7 +56,7 @@ export function DiagnosticPlayer({ subject }: DiagnosticPlayerProps) {
     if (unansweredCount > 0 && !window.confirm(`You have ${unansweredCount} unanswered question${unansweredCount === 1 ? "" : "s"}. Submit anyway?`)) return;
     setStatus("submitting");
     setError("");
-    const responses = questions.map((item) => ({ questionId: item.id, choiceId: answers[item.id] ?? null }));
+    const responses = questions.map((item) => ({ questionId: item.id, choiceId: answersRef.current[item.id] ?? null }));
     try {
       const response = await fetch("/api/prototype/score", {
         method: "POST",
@@ -64,7 +67,7 @@ export function DiagnosticPlayer({ subject }: DiagnosticPlayerProps) {
       const score = await response.json();
       writeSession({
         ...readSession(subject, subject),
-        answers,
+        answers: answersRef.current,
         status: "submitted",
         score,
       });
