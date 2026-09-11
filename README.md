@@ -1,16 +1,39 @@
-# ACT Diagnostic Tool
+# ACT Adaptive
 
-An intentional starter for a software diagnostic workspace. The first pass keeps the diagnostic loop explicit and inspectable; AI is reserved as a future extension point and is not connected yet.
+The first prototype of an adaptive ACT English and Math remediation loop:
 
-## Stack
+```text
+diagnose → see evidence-backed priorities → learn → practice → reassess
+```
 
-- Next.js App Router, React, and TypeScript
-- Tailwind CSS and shadcn/ui
-- Supabase Auth with cookie-based SSR
-- FastAPI domain-service foundation with authenticated `/v1/me`
-- Supabase PostgreSQL with Drizzle ORM and `postgres.js`
-- Playwright for end-to-end smoke tests
-- pnpm, GitHub Actions, and Vercel-ready deployment config
+It is intentionally plain. The current goal is to make the learning loop
+readable, testable, and inspectable before adding broader coverage or visual
+complexity.
+
+## Working now
+
+- English and Math diagnostic entry points with resumable browser-local answers.
+- Submit-time diagnostic scoring with no answer key in the question payload.
+- Explainable weighted Beta-Binomial mastery bands and ranked skill targets.
+- Curated resource links, targeted practice feedback, and unseen reassessment.
+- Combined diagnostic + reassessment evidence with a minimal progress view.
+- Supabase magic-link sign-in boundary that activates when public Supabase
+  config is present; otherwise the app clearly runs in prototype mode.
+- FastAPI operational/authentication foundation at `services/api/`.
+- PostgreSQL domain schema migration for versioned content, assessment facts,
+  mastery evidence, remediation cycles, generated-content review, and pilot
+  analytics.
+- Canonical ACT exports organized under `content/exports/` and checked by a
+  dry-run validator.
+
+## Prototype boundary
+
+The student flow currently stores session state in `localStorage`, and the
+demo question bank is authored prototype content mapped to IDs from the
+canonical taxonomy exports. It is not official ACT score-equivalent content.
+The FastAPI service is not yet the browser flow's persistence backend; it
+currently establishes the service boundary, health/readiness endpoints, and
+`/v1/me` authentication contract.
 
 ## Local setup
 
@@ -20,42 +43,43 @@ cp .env.example .env.local
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
-
-Add the Supabase project URL and publishable key to `.env.local` for browser/server auth. Add `DATABASE_URL` when you are ready to run Drizzle commands against the project database.
+Open [http://localhost:3000](http://localhost:3000). Add Supabase variables to
+`.env.local` to enable magic-link access. Without them, choose “Continue in
+prototype mode” on `/sign-in`.
 
 ## Commands
 
 ```bash
-pnpm dev          # Start the local app
-pnpm lint         # Run ESLint
-pnpm typecheck    # Check TypeScript
-pnpm build        # Create a production build
-pnpm test:e2e     # Run Playwright smoke tests
-pnpm api:install  # Install the FastAPI service and its test dependencies
-pnpm api:dev      # Start the FastAPI service
-pnpm api:test     # Run FastAPI tests
-pnpm api:typecheck # Compile-check FastAPI modules
-pnpm content:validate # Validate master content exports (dry run)
-pnpm db:generate  # Generate Drizzle migrations
-pnpm db:push      # Push the schema to PostgreSQL
-pnpm db:studio    # Open Drizzle Studio
+pnpm dev             # Start the Next.js app
+pnpm lint            # Run ESLint
+pnpm typecheck       # Check TypeScript
+pnpm build           # Create a production build
+pnpm test:e2e        # Run Playwright smoke tests
+pnpm content:validate # Validate both canonical exports, without DB writes
+pnpm api:install     # Install FastAPI service/test dependencies
+pnpm api:dev         # Start FastAPI at 127.0.0.1:8000
+pnpm api:test        # Run FastAPI tests
+pnpm api:typecheck   # Compile-check FastAPI modules
+pnpm db:generate     # Generate legacy Drizzle migrations
+pnpm db:push         # Push the legacy Drizzle schema
 ```
 
 ## Project map
 
 ```text
-src/app/              App Router pages and global styles
-src/components/ui/    shadcn/ui primitives
-src/db/               Drizzle schema and lazy database client
-src/lib/supabase/     Browser, server, and Proxy auth clients
-src/proxy.ts          Next.js 16 session refresh entry point
-services/api/         FastAPI operational and identity boundary
-content/exports/      Canonical ACT taxonomy/content export artifacts
-tests/                Playwright tests
-drizzle.config.ts     Drizzle Kit configuration
+src/app/                 Next.js App Router pages and prototype API routes
+src/components/act/      Student loop UI and browser-local session behavior
+src/lib/act/              Typed content contract and deterministic scoring
+src/lib/supabase/         Browser/server clients and pilot route guard
+services/api/             FastAPI identity/operations boundary and SQL schema
+content/exports/          Canonical ACT taxonomy/content artifacts
+tests/                    Playwright smoke coverage
+docs/adr/                 Architecture decisions
 ```
 
-## Deployment
+## Pilot work still required
 
-The project is ready to connect to GitHub and import into Vercel. Set the same Supabase variables and `DATABASE_URL` in the Vercel project environment settings before enabling authenticated or persisted flows.
+Before a real pilot, move assessment and remediation writes to FastAPI/PostgreSQL,
+add durable exposure/idempotency handling, import reviewed content into the
+canonical tables, add internal review/export tools, and complete the privacy,
+rights, accessibility, and backup/restore gates in `plan.md`.
