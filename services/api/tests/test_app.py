@@ -239,3 +239,51 @@ def test_issue_queue_requires_a_configured_database() -> None:
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "request_failed"
+
+
+def test_content_review_requires_reviewer_access() -> None:
+    blueprint_id = "00000000-0000-0000-0000-000000000001"
+    with TestClient(app) as client:
+        response = client.post(
+            f"/v1/internal/content/{blueprint_id}/reviews",
+            json={
+                "blueprint_id": blueprint_id,
+                "content_source_ids": ["00000000-0000-0000-0000-000000000002"],
+                "decision": "publish",
+                "confirm_review": True,
+                "confirm_content_review": True,
+                "confirm_rights_clearance": True,
+                "confirm_answer_key_review": True,
+                "notes": "Reviewed slice.",
+            },
+        )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+
+
+def test_content_review_requires_a_configured_database() -> None:
+    blueprint_id = "00000000-0000-0000-0000-000000000001"
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        id="reviewer-test", role="reviewer"
+    )
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                f"/v1/internal/content/{blueprint_id}/reviews",
+                json={
+                    "blueprint_id": blueprint_id,
+                    "content_source_ids": ["00000000-0000-0000-0000-000000000002"],
+                    "decision": "reject",
+                    "confirm_review": True,
+                    "confirm_content_review": True,
+                    "confirm_rights_clearance": False,
+                    "confirm_answer_key_review": False,
+                    "notes": "The slice needs more review.",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "request_failed"

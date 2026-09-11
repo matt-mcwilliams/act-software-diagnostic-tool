@@ -36,6 +36,15 @@ from .assessments import (
 )
 from .content import ImportPreview, ImportPreviewRequest, SubjectSlug, preview_requested_exports
 from .content_import import ContentImportRequest, ContentImportResult, import_canonical_export
+from .content_review import (
+    ContentReviewConflict,
+    ContentReviewError,
+    ContentReviewNotFound,
+    ContentReviewRequest,
+    ContentReviewResult,
+    ContentReviewUnavailable,
+    review_content_slice,
+)
 from .errors import http_exception_handler, unhandled_exception_handler, validation_exception_handler
 from .issues import (
     IssueError,
@@ -362,6 +371,46 @@ def _analytics_http_error(exc: AnalyticsError) -> HTTPException:
     if isinstance(exc, AnalyticsUnavailable):
         return HTTPException(status_code=503, detail=str(exc))
     return HTTPException(status_code=503, detail="Pilot export could not be generated")
+
+
+def _content_review_http_error(exc: ContentReviewError) -> HTTPException:
+    if isinstance(exc, ContentReviewNotFound):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, ContentReviewConflict):
+        return HTTPException(status_code=409, detail=str(exc))
+    if isinstance(exc, ContentReviewUnavailable):
+        return HTTPException(status_code=503, detail=str(exc))
+    return HTTPException(status_code=503, detail="Content review could not be completed")
+
+
+def _content_review_database_url() -> str:
+    database_url = get_settings().database_url
+    if not database_url:
+        raise HTTPException(status_code=503, detail="API database is not configured")
+    return database_url
+
+
+@app.post(
+    "/v1/internal/content/{content_id}/reviews",
+    response_model=ContentReviewResult,
+    tags=["internal-content"],
+)
+async def review_content(
+    content_id: str,
+    payload: ContentReviewRequest,
+    user: CurrentUser = Depends(require_reviewer),
+) -> ContentReviewResult:
+    if content_id != str(payload.blueprint_id):
+        raise HTTPException(status_code=404, detail="Content review target was not found")
+    try:
+        return await run_in_threadpool(
+            review_content_slice,
+            _content_review_database_url(),
+            user.id,
+            payload,
+        )
+    except ContentReviewError as exc:
+        raise _content_review_http_error(exc) from exc
 
 
 @app.get(
