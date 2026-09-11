@@ -39,3 +39,17 @@ curl -X POST http://127.0.0.1:8000/v1/internal/imports/preview \
 
 The response includes source hashes, normalized row counts, and blocking
 warnings such as missing primary-skill mappings or unresolved rights review.
+
+## Domain migrations
+
+The FastAPI service owns the domain migration history. Preview the migration
+manifest without a database connection, or apply unapplied migrations using
+the server-only `ACT_API_DATABASE_URL`:
+
+```bash
+pnpm api:migrate --dry-run
+pnpm api:migrate
+```
+
+Applied migrations are recorded with a SHA-256 checksum. Re-running is a
+no-op; changing an already-applied file stops with an error.

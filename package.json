@@ -16,6 +16,7 @@
     "test:e2e:ui": "playwright test --ui",
     "api:install": "python3 -m pip install -e 'services/api[dev]'",
     "api:dev": "python3 -m uvicorn app.main:app --app-dir services/api --reload",
+    "api:migrate": "python3 services/api/migrate.py",
     "api:test": "python3 -m pytest services/api/tests",
     "api:typecheck": "python3 -m compileall -q services/api/app",
     "content:validate": "node scripts/validate-content.mjs"
