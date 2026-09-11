@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from .content import SubjectSlug
+from .mastery import MasterySnapshot, Recommendation
 
 ChoiceId = Literal["A", "B", "C", "D"]
 SessionStatus = Literal[
@@ -90,6 +91,8 @@ class AssessmentResult(BaseModel):
     items: list[ScoredItem]
     scoring_version: str
     mastery_model_version: str
+    snapshots: list[MasterySnapshot] = Field(default_factory=list)
+    recommendations: list[Recommendation] = Field(default_factory=list)
 
 
 class AssessmentConflict(Exception):
@@ -546,6 +549,8 @@ def _result_from_score_details(
         items=items,
         scoring_version=scoring_version,
         mastery_model_version=mastery_model_version,
+        snapshots=[MasterySnapshot.model_validate(item) for item in details.get("snapshots", [])],
+        recommendations=[Recommendation.model_validate(item) for item in details.get("recommendations", [])],
     )
 
 
@@ -729,6 +734,19 @@ def submit_session(
                     scoring_version=session_row[2],
                     mastery_model_version=session_row[3],
                 )
+                from .mastery import calculate_and_persist_mastery
+
+                snapshots, recommendations = calculate_and_persist_mastery(
+                    cursor,
+                    student_uuid,
+                    session_row[0],
+                    session_uuid,
+                    session_row[3],
+                )
+                result = result.model_copy(update={
+                    "snapshots": snapshots,
+                    "recommendations": recommendations,
+                })
                 cursor.execute(
                     """
                     INSERT INTO session_scores (session_id, raw_correct, raw_total, score_details, scoring_version)
