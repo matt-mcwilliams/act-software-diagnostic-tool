@@ -10,6 +10,7 @@ from .content import SubjectSlug
 from .mastery import MasterySnapshot, Recommendation
 
 ChoiceId = Literal["A", "B", "C", "D"]
+AssessmentPurpose = Literal["diagnostic", "practice", "reassessment"]
 SessionStatus = Literal[
     "created",
     "in_progress",
@@ -25,7 +26,7 @@ SessionStatus = Literal[
 class AssessmentBlueprint(BaseModel):
     id: str
     subject: SubjectSlug
-    purpose: Literal["diagnostic"]
+    purpose: AssessmentPurpose
     version: str
     item_count: int = Field(ge=1)
     scoring_version: str
@@ -56,7 +57,7 @@ class AssessmentItem(BaseModel):
 class AssessmentSession(BaseModel):
     id: str
     subject: SubjectSlug
-    purpose: Literal["diagnostic"]
+    purpose: AssessmentPurpose
     status: SessionStatus
     items: list[AssessmentItem]
     answers: dict[str, ChoiceId] = Field(default_factory=dict)
@@ -86,7 +87,7 @@ class ScoredItem(BaseModel):
 class AssessmentResult(BaseModel):
     session_id: str
     subject: SubjectSlug
-    purpose: Literal["diagnostic"]
+    purpose: AssessmentPurpose
     correct: int = Field(ge=0)
     answered: int = Field(ge=0)
     total: int = Field(ge=0)
@@ -130,7 +131,7 @@ def _blueprint_from_row(row: tuple[Any, ...]) -> AssessmentBlueprint:
     return AssessmentBlueprint(
         id=str(row[0]),
         subject=row[1],
-        purpose="diagnostic",
+        purpose=row[2],
         version=str(row[3]),
         item_count=_item_count(row[4]),
         scoring_version=str(row[5]),
@@ -218,7 +219,7 @@ def _load_session(cursor: Any, student_id: UUID, session_id: str) -> AssessmentS
     return AssessmentSession(
         id=str(session_row[0]),
         subject=session_row[1],
-        purpose="diagnostic",
+        purpose=session_row[2],
         status=session_row[3],
         answers={
             str(row[0]): row[5]
@@ -544,6 +545,7 @@ def save_response(
 def _result_from_score_details(
     session_id: str,
     subject: SubjectSlug,
+    purpose: AssessmentPurpose,
     scoring_version: str,
     mastery_model_version: str,
     score_details: Any,
@@ -553,7 +555,7 @@ def _result_from_score_details(
     return AssessmentResult(
         session_id=session_id,
         subject=subject,
-        purpose="diagnostic",
+        purpose=purpose,
         correct=int(details.get("correct", 0)),
         answered=int(details.get("answered", 0)),
         total=int(details.get("total", len(items))),
@@ -584,7 +586,7 @@ def _load_result(
         """
         SELECT session_scores.score_details,
                COALESCE(session_scores.scoring_version, blueprint.scoring_version),
-               blueprint.mastery_model_version, subject.slug
+               blueprint.mastery_model_version, subject.slug, session.purpose::text
         FROM assessment_sessions session
         JOIN assessment_blueprints blueprint ON blueprint.id = session.blueprint_id
         JOIN subjects subject ON subject.id = blueprint.subject_id
@@ -599,6 +601,7 @@ def _load_result(
     return _result_from_score_details(
         session_id,
         row[3],
+        row[4],
         scoring_version or row[1],
         mastery_model_version or row[2],
         row[0],
@@ -670,7 +673,7 @@ def submit_session(
 
             cursor.execute(
                 """
-                SELECT subject.slug, session.status::text,
+                SELECT subject.slug, session.purpose::text, session.status::text,
                        blueprint.scoring_version, blueprint.mastery_model_version
                 FROM assessment_sessions session
                 JOIN assessment_blueprints blueprint ON blueprint.id = session.blueprint_id
@@ -683,9 +686,9 @@ def submit_session(
             session_row = cursor.fetchone()
             if not session_row:
                 raise AssessmentNotFound("Assessment session was not found")
-            if session_row[1] == "scored":
+            if session_row[2] == "scored":
                 result = _load_result(cursor, student_uuid, session_id)
-            elif session_row[1] not in {"created", "in_progress", "submitted", "scoring"}:
+            elif session_row[2] not in {"created", "in_progress", "submitted", "scoring"}:
                 raise AssessmentConflict("Assessment session cannot be submitted")
             else:
                 cursor.execute(
@@ -737,23 +740,27 @@ def submit_session(
                 result = AssessmentResult(
                     session_id=session_id,
                     subject=session_row[0],
-                    purpose="diagnostic",
+                    purpose=session_row[1],
                     correct=sum(1 for item in items if item.correct is True),
                     answered=sum(1 for item in items if item.choice_id is not None),
                     total=len(items),
                     items=items,
-                    scoring_version=session_row[2],
-                    mastery_model_version=session_row[3],
+                    scoring_version=session_row[3],
+                    mastery_model_version=session_row[4],
                 )
-                from .mastery import calculate_and_persist_mastery
+                snapshots = []
+                recommendations = []
+                if session_row[1] in {"diagnostic", "reassessment"}:
+                    from .mastery import calculate_and_persist_mastery
 
-                snapshots, recommendations = calculate_and_persist_mastery(
-                    cursor,
-                    student_uuid,
-                    session_row[0],
-                    session_uuid,
-                    session_row[3],
-                )
+                    snapshots, recommendations = calculate_and_persist_mastery(
+                        cursor,
+                        student_uuid,
+                        session_row[0],
+                        session_uuid,
+                        session_row[4],
+                        source_purpose=session_row[1],
+                    )
                 result = result.model_copy(update={
                     "snapshots": snapshots,
                     "recommendations": recommendations,

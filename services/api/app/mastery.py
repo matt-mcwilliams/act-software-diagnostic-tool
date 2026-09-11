@@ -98,7 +98,12 @@ def calculate_snapshot(
     )
 
 
-def _upsert_evidence(cursor: Any, evidence_by_response: dict[str, dict[str, dict[str, Any]]], model_version: str) -> None:
+def _upsert_evidence(
+    cursor: Any,
+    evidence_by_response: dict[str, dict[str, dict[str, Any]]],
+    model_version: str,
+    source_purpose: str,
+) -> None:
     from psycopg.types.json import Jsonb
 
     for response_id, evidence_by_skill in evidence_by_response.items():
@@ -108,7 +113,7 @@ def _upsert_evidence(cursor: Any, evidence_by_response: dict[str, dict[str, dict
                 INSERT INTO mastery_evidence
                   (student_id, skill_id, response_id, direction, weight,
                    source_purpose, model_version, details)
-                VALUES (%s, %s, %s, %s, %s, 'diagnostic', %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (response_id, skill_id, model_version) DO NOTHING
                 """,
                 (
@@ -117,6 +122,7 @@ def _upsert_evidence(cursor: Any, evidence_by_response: dict[str, dict[str, dict
                     UUID(response_id),
                     evidence["direction"],
                     evidence["weight"],
+                    source_purpose,
                     model_version,
                     Jsonb(evidence["details"]),
                 ),
@@ -129,6 +135,7 @@ def calculate_and_persist_mastery(
     subject: str,
     session_id: UUID,
     model_version: str = MASTERY_MODEL_VERSION,
+    source_purpose: str = "diagnostic",
 ) -> tuple[list[MasterySnapshot], list[Recommendation]]:
     from psycopg.types.json import Jsonb
 
@@ -231,7 +238,7 @@ def calculate_and_persist_mastery(
         if response_evidence:
             evidence_by_response[str(response_id)] = response_evidence
 
-    _upsert_evidence(cursor, evidence_by_response, model_version)
+    _upsert_evidence(cursor, evidence_by_response, model_version, source_purpose)
     cursor.execute(
         """
         SELECT evidence.skill_id, evidence.direction::text, evidence.weight
