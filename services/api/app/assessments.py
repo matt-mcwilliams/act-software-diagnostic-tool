@@ -59,6 +59,8 @@ class AssessmentSession(BaseModel):
     purpose: Literal["diagnostic"]
     status: SessionStatus
     items: list[AssessmentItem]
+    answers: dict[str, ChoiceId] = Field(default_factory=dict)
+    revisions: dict[str, int] = Field(default_factory=dict)
 
 
 class ResponseSaveRequest(BaseModel):
@@ -184,10 +186,13 @@ def _load_session(cursor: Any, student_id: UUID, session_id: str) -> AssessmentS
 
     cursor.execute(
         """
-        SELECT item.id, item.question_id, item.position, question.stem, passage.body
+        SELECT item.id, item.question_id, item.position, question.stem, passage.body,
+               response_choice.label, response.client_revision
         FROM assessment_session_items item
         JOIN questions question ON question.id = item.question_id
         LEFT JOIN passages passage ON passage.id = question.passage_id
+        LEFT JOIN responses response ON response.session_item_id = item.id
+        LEFT JOIN answer_choices response_choice ON response_choice.id = response.answer_choice_id
         WHERE item.session_id = %s
         ORDER BY item.position
         """,
@@ -215,6 +220,12 @@ def _load_session(cursor: Any, student_id: UUID, session_id: str) -> AssessmentS
         subject=session_row[1],
         purpose="diagnostic",
         status=session_row[3],
+        answers={
+            str(row[0]): row[5]
+            for row in item_rows
+            if row[5] in {"A", "B", "C", "D"}
+        },
+        revisions={str(row[0]): int(row[6] or 0) for row in item_rows},
         items=[
             AssessmentItem(
                 id=str(row[0]),
