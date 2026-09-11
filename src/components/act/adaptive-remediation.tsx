@@ -249,7 +249,10 @@ function FastApiPracticeView({ subject, skillId }: { subject: Subject; skillId: 
       cache: "no-store",
     });
     if (!response.ok) throw new Error(await responseError(response, "Practice was scored but could not be marked complete."));
-    setCycle(await response.json() as FastApiRemediationCycle);
+    const completedSet = await response.json() as FastApiPracticeSet;
+    const cycleResponse = await fetch(`/api/assessment/cycles/${cycle.id}`, { cache: "no-store" });
+    if (cycleResponse.ok) setCycle(await cycleResponse.json() as FastApiRemediationCycle);
+    setPracticeSet(completedSet);
     setResult(nextResult);
   }
 
@@ -305,10 +308,17 @@ function FastApiReassessmentView({ subject, skillId }: { subject: Subject; skill
         });
       }
       if (!sessionResponse.ok) throw new Error(await responseError(sessionResponse, "Unseen reassessment is not ready yet."));
+      const loadedSession = await sessionResponse.json() as FastApiAssessmentSession;
       if (!active) return;
       window.localStorage.setItem(cycleKey(subject, skillId), loadedCycle.id);
       setCycle(loadedCycle);
-      setSession(await sessionResponse.json() as FastApiAssessmentSession);
+      if (["submitted", "scoring", "scored"].includes(loadedSession.status)) {
+        const resultResponse = await fetch(`/api/assessment/sessions/${loadedSession.id}/results`, { cache: "no-store" });
+        if (resultResponse.ok) setResult(await resultResponse.json() as FastApiAssessmentResult);
+        else setSession(loadedSession);
+      } else {
+        setSession(loadedSession);
+      }
       setLoading(false);
     }
     loadReassessment().catch((loadError: unknown) => {
@@ -326,7 +336,7 @@ function FastApiReassessmentView({ subject, skillId }: { subject: Subject; skill
   }
 
   if (loading) return <ModeMessage message="Loading unseen reassessment…" status />;
-  if (error || !cycle || !session) return <ModeMessage message={error || "Unseen reassessment is not ready yet."} />;
+  if (error || !cycle) return <ModeMessage message={error || "Unseen reassessment is not ready yet."} />;
   if (result) {
     const snapshot = result.snapshots.find((candidate) => candidate.skill_id === skillId);
     return (
@@ -343,6 +353,7 @@ function FastApiReassessmentView({ subject, skillId }: { subject: Subject; skill
       </div>
     );
   }
+  if (!session) return <ModeMessage message="Unseen reassessment is not ready yet." />;
 
   return <FastApiSessionPlayer session={{ ...session, purpose: "reassessment" }} eyebrow="Unseen reassessment" heading="What transferred?" description="These questions are separate from practice. Feedback will appear after you submit the set." submitLabel="Submit reassessment" submittingLabel="Scoring…" onSubmitted={finishReassessment} />;
 }
