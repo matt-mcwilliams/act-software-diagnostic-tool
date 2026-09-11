@@ -24,6 +24,21 @@ test("a student can complete an English diagnostic and resume saved work", async
   await expect(page.getByText("Saved")).toBeVisible();
 });
 
+test("the diagnostic remains keyboard usable at 200 percent zoom", async ({ page }) => {
+  await page.goto("/diagnostic/english");
+  await expect(page.getByText("Question 1 of 8")).toBeVisible({ timeout: 15000 });
+
+  await page.locator("html").evaluate((element) => {
+    element.style.zoom = "2";
+  });
+  await page.getByRole("radio").first().focus();
+  await page.keyboard.press("Space");
+
+  await expect(page.getByRole("radio").first()).toHaveAttribute("aria-checked", "true");
+  const fitsViewport = await page.locator("body").evaluate((body) => body.scrollWidth <= window.innerWidth + 2);
+  expect(fitsViewport).toBeTruthy();
+});
+
 test("a student can complete the English diagnose-to-reassess loop", async ({ page }) => {
   await page.goto("/diagnostic/english");
   await expect(page.getByText("Question 1 of 8")).toBeVisible({ timeout: 15000 });
