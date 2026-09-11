@@ -26,6 +26,9 @@ complexity.
   content is available.
 - Reviewer-only canonical import preview and draft import endpoints with
   source-hash audit records.
+- Reviewer content review/publish and issue queue endpoints with explicit
+  rights/answer-key confirmation gates.
+- Authenticated learner issue reports and keyed, de-identified pilot exports.
 - Authenticated FastAPI diagnostic catalog, session start/resume, and
   answer-key-free response-save contract with exposure and idempotency rules.
 - FastAPI operational/authentication foundation at `services/api/`.
@@ -91,8 +94,7 @@ docs/adr/                 Architecture decisions
 
 ## Pilot work still required
 
-Before a real pilot, approve reviewed purpose-specific blueprints and
-inventory; add minimal durable progress history, internal review/export and
-issue-reporting tools; add analytics/tutor comparison; and complete the
-privacy, rights, accessibility, rate-limit, and backup/restore gates in
-`plan.md`.
+Before a real pilot, use the reviewer endpoints to approve the actual
+purpose-specific blueprints and inventory; add tutor comparison and richer
+analytics; and complete the privacy, rights, accessibility, rate-limit, and
+backup/restore gates in `plan.md`.

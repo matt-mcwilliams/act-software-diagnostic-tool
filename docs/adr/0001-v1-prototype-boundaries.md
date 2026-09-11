@@ -42,5 +42,6 @@ later move domain writes behind a FastAPI service.
   current starter database is production-ready.
 - The API contract can be tested now for answer-key separation and later point
   at FastAPI without changing student-facing question semantics.
-- A real pilot still requires auth, durable domain tables, imports, exposure
-  tracking, issue/report operations, and de-identified exports before release.
+- A real pilot still requires configured/authenticated database operation,
+  reviewed inventory, tutor comparison, richer analytics, and the remaining
+  privacy, accessibility, rate-limit, and backup/restore gates before release.

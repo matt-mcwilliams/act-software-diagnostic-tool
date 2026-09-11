@@ -68,6 +68,8 @@ GET  /v1/assessment-sessions/{session_id}
 PUT  /v1/assessment-sessions/{session_id}/responses/{session_item_id}
 POST /v1/assessment-sessions/{session_id}/submit
 GET  /v1/assessment-sessions/{session_id}/results
+POST /v1/issue-reports
+```
 
 Remediation and durable learning endpoints:
 
@@ -86,7 +88,25 @@ Practice and reassessment sets reuse the public assessment-session response
 protocol. They require approved purpose-specific blueprints, approved
 rights-cleared inventory, and exclude every question already exposed to the
 student.
+
+## Reviewer operations
+
+After importing, a reviewer can explicitly publish or reject a draft
+blueprint and selected source slice. Publishing requires confirmation of the
+content review, rights clearance, and answer-key review; the response contains
+only lifecycle and count metadata:
+
+```text
+POST  /v1/internal/content/{blueprint_id}/reviews
+GET   /v1/internal/issues?status=open
+PATCH /v1/internal/issues/{issue_id}
+GET   /v1/internal/experiments/{experiment_key}/export
 ```
+
+The export requires `ACT_API_EXPORT_PSEUDONYM_SECRET`. It returns keyed pilot
+pseudonyms and cohort-level skill/completion facts, never names, emails,
+question text, response text, or answer keys. Keep the secret in `.env.local`
+or the deployment secret store; do not put it in a committed environment file.
 
 Session items contain prompts and choices only. Response saves require an
 `Idempotency-Key` header and a monotonic `client_revision`; stale revisions
