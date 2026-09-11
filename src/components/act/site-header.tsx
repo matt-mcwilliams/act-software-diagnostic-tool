@@ -20,6 +20,9 @@ export function SiteHeader() {
           <Link className="rounded-md px-3 py-2 text-slate-600 hover:bg-slate-100 hover:text-slate-950" href="/progress">
             Progress
           </Link>
+          <Link className="rounded-md px-3 py-2 text-slate-600 hover:bg-slate-100 hover:text-slate-950" href="/sign-in">
+            Sign in
+          </Link>
         </nav>
       </div>
     </header>

@@ -1,7 +1,9 @@
 import { PageFrame } from "@/components/act/page-frame";
 import { StartChooser } from "@/components/act/start-chooser";
+import { requirePilotUser } from "@/lib/supabase/guard";
 
-export default function StartPage() {
+export default async function StartPage() {
+  await requirePilotUser();
   return (
     <PageFrame>
       <div className="max-w-2xl">
