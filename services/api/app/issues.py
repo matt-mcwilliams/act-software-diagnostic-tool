@@ -6,6 +6,8 @@ exposures so the endpoint cannot be used to discover another student's data.
 """
 
 from datetime import datetime
+import hashlib
+import json
 from typing import Any, Literal
 from uuid import UUID
 
@@ -21,6 +23,10 @@ class IssueError(Exception):
 
 class IssueNotFound(IssueError):
     """The report target is absent or not visible to the reporter."""
+
+
+class IssueConflict(IssueError):
+    """The report request conflicts with an existing idempotency operation."""
 
 
 class IssueUnavailable(IssueError):
@@ -137,13 +143,47 @@ def create_issue_report(
     database_url: str | None,
     reporter_id: str,
     payload: IssueReportRequest,
+    idempotency_key: str | None = None,
 ) -> IssueReport:
     """Create a report only for an entity visible to the authenticated student."""
 
     reporter_uuid = _student_uuid(reporter_id)
+    normalized_key = idempotency_key.strip() if idempotency_key else None
+    if normalized_key is not None and not 1 <= len(normalized_key) <= 255:
+        raise IssueConflict("Idempotency-Key must contain between 1 and 255 characters")
+    request_hash = hashlib.sha256(
+        json.dumps(payload.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     try:
         with _connect(database_url) as connection:
             with connection.cursor() as cursor:
+                if normalized_key:
+                    cursor.execute(
+                        """
+                        SELECT request_hash, status, response_body
+                        FROM idempotency_keys
+                        WHERE owner_id = %s AND scope = 'issue-report' AND key = %s
+                        FOR UPDATE
+                        """,
+                        (reporter_uuid, normalized_key),
+                    )
+                    existing = cursor.fetchone()
+                    if existing:
+                        if existing[0] != request_hash:
+                            raise IssueConflict("Idempotency-Key was already used for another report")
+                        if existing[1] == "completed" and isinstance(existing[2], dict):
+                            return IssueReport.model_validate(existing[2])
+                        if existing[1] == "in_progress":
+                            raise IssueConflict("An issue report with this Idempotency-Key is already in progress")
+                    else:
+                        cursor.execute(
+                            """
+                            INSERT INTO idempotency_keys
+                              (owner_id, scope, key, request_hash, status)
+                            VALUES (%s, 'issue-report', %s, %s, 'in_progress')
+                            """,
+                            (reporter_uuid, normalized_key, request_hash),
+                        )
                 if not _target_is_visible(cursor, reporter_uuid, payload):
                     raise IssueNotFound("Issue report target was not found")
                 cursor.execute(
@@ -165,7 +205,7 @@ def create_issue_report(
                 row = cursor.fetchone()
                 if not row:
                     raise IssueUnavailable("Issue report could not be created")
-                return IssueReport(
+                report = IssueReport(
                     id=str(row[0]),
                     entity_type=row[1],
                     entity_id=str(row[2]) if row[2] else None,
@@ -174,6 +214,19 @@ def create_issue_report(
                     status=row[5],
                     created_at=row[6],
                 )
+                if normalized_key:
+                    from psycopg.types.json import Jsonb
+
+                    cursor.execute(
+                        """
+                        UPDATE idempotency_keys
+                        SET status = 'completed', response_status = 200,
+                            response_body = %s, completed_at = now()
+                        WHERE owner_id = %s AND scope = 'issue-report' AND key = %s
+                        """,
+                        (Jsonb(report.model_dump(mode="json")), reporter_uuid, normalized_key),
+                    )
+                return report
     except IssueError:
         raise
     except Exception as exc:
@@ -275,6 +328,7 @@ def resolve_issue_report(
 
 __all__ = [
     "IssueEntityType",
+    "IssueConflict",
     "IssueError",
     "IssueNotFound",
     "IssueReport",

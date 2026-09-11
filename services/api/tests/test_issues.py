@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.issues import IssueReport, IssueReportRequest, IssueResolutionRequest
+from app.issues import IssueConflict, IssueReport, IssueReportRequest, IssueResolutionRequest
 
 
 def test_issue_report_request_strips_text_and_rejects_extra_fields() -> None:
@@ -68,3 +68,21 @@ def test_issue_resolution_requires_a_non_blank_safe_decision() -> None:
         IssueResolutionRequest(status="open", resolution="not a terminal decision")
     with pytest.raises(ValidationError):
         IssueResolutionRequest(status="dismissed", resolution=" ")
+
+
+def test_issue_idempotency_key_rejects_blank_or_oversized_values() -> None:
+    payload = IssueReportRequest(
+        entity_type="question",
+        entity_id=uuid4(),
+        category="question",
+        description="The question is confusing.",
+    )
+
+    with pytest.raises(IssueConflict):
+        from app.issues import create_issue_report
+
+        create_issue_report(None, str(uuid4()), payload, " ")
+    with pytest.raises(IssueConflict):
+        from app.issues import create_issue_report
+
+        create_issue_report(None, str(uuid4()), payload, "x" * 256)
