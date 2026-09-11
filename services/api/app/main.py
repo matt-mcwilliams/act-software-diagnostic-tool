@@ -3,13 +3,15 @@ import time
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .auth import CurrentUser, get_current_user, require_reviewer
 from .content import ImportPreview, ImportPreviewRequest, preview_requested_exports
+from .content_import import ContentImportRequest, ContentImportResult, import_canonical_export
 from .errors import http_exception_handler, unhandled_exception_handler, validation_exception_handler
 from .settings import get_settings
 
@@ -86,3 +88,19 @@ async def preview_content_import(
 ) -> list[ImportPreview]:
     """Validate canonical exports without writing content or returning item text."""
     return preview_requested_exports(payload.subject)
+
+
+@app.post(
+    "/v1/internal/imports",
+    response_model=ContentImportResult,
+    tags=["internal-content"],
+)
+async def import_content(
+    payload: ContentImportRequest,
+    user: CurrentUser = Depends(require_reviewer),
+) -> ContentImportResult:
+    """Import canonical content as draft/pending-review rows."""
+    database_url = get_settings().database_url
+    if not database_url:
+        raise HTTPException(status_code=503, detail="API database is not configured")
+    return await run_in_threadpool(import_canonical_export, database_url, payload.subject, user.id)

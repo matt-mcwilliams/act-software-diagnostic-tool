@@ -71,3 +71,20 @@ def test_content_preview_returns_safe_import_summary() -> None:
     }
     assert "correctOption" not in str(body)
     assert "optionA" not in str(body)
+
+
+def test_content_import_requires_a_configured_database() -> None:
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        id="reviewer-test", role="reviewer"
+    )
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/internal/imports",
+                json={"subject": "english"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "request_failed"

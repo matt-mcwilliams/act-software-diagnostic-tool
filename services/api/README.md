@@ -40,6 +40,19 @@ curl -X POST http://127.0.0.1:8000/v1/internal/imports/preview \
 The response includes source hashes, normalized row counts, and blocking
 warnings such as missing primary-skill mappings or unresolved rights review.
 
+Once `ACT_API_DATABASE_URL` is configured, the same reviewer/admin boundary
+can import a selected export:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/internal/imports \
+  -H 'Authorization: Bearer <reviewer-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"subject":"english"}'
+```
+
+Imports are source-hash idempotent and create draft/pending-review content.
+They do not make raw canonical content assignable or expose it in the result.
+
 ## Domain migrations
 
 The FastAPI service owns the domain migration history. Preview the migration
