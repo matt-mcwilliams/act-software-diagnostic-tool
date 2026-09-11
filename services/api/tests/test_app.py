@@ -128,3 +128,30 @@ def test_submit_requires_a_configured_database() -> None:
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "request_failed"
+
+
+def test_remediation_endpoints_require_authentication() -> None:
+    with TestClient(app) as client:
+        response = client.get("/v1/remediation-cycles/not-a-cycle")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+
+
+def test_remediation_cycle_requires_a_configured_database() -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("ACT_API_ALLOW_TEST_USER", "true")
+    get_settings.cache_clear()
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/remediation-cycles",
+                headers={"authorization": "Bearer prototype-test-token"},
+                json={"skill_id": "00000000-0000-0000-0000-000000000001"},
+            )
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "request_failed"
