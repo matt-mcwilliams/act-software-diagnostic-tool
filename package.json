@@ -13,7 +13,11 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "api:install": "python3 -m pip install -e 'services/api[dev]'",
+    "api:dev": "python3 -m uvicorn app.main:app --app-dir services/api --reload",
+    "api:test": "python3 -m pytest services/api/tests",
+    "api:typecheck": "python3 -m compileall -q services/api/app"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
