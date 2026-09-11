@@ -15,3 +15,8 @@ session mutations: one open assessment per student/blueprint and scoped
 `idempotency_keys` containing a request hash plus the completed response. A
 mutation must return the stored response for the same owner/scope/key, and
 must reject a reused key whose request hash differs.
+
+Migration `0002` records each canonical-content import batch by source hash,
+taxonomy/schema version, row counts, warnings, and lifecycle status. Imported
+canonical exports remain non-assignable until their review and rights gates
+are cleared.

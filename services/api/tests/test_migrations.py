@@ -15,6 +15,6 @@ def test_split_sql_preserves_semicolons_inside_strings() -> None:
 def test_domain_migration_manifest_is_stable() -> None:
     files = migration_files()
 
-    assert [path.name for path in files] == ["0001_domain_schema.sql"]
+    assert [path.name for path in files] == ["0001_domain_schema.sql", "0002_import_batches.sql"]
     assert all(len(migration_checksum(path)) == 64 for path in files)
     assert Path(files[0]).read_text(encoding="utf-8").count("CREATE TABLE") >= 20
