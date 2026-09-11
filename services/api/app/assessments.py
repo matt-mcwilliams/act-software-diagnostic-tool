@@ -87,7 +87,8 @@ def _item_count(rules: Any) -> int:
     if not isinstance(rules, dict):
         return 0
     try:
-        return max(1, int(rules.get("itemCount", 0)))
+        count = int(rules.get("itemCount", 0))
+        return count if count > 0 else 0
     except (TypeError, ValueError):
         return 0
 
@@ -242,7 +243,7 @@ def create_or_resume_session(database_url: str, student_id: str, payload: Sessio
 
             cursor.execute(
                 """
-                SELECT question.id
+                SELECT DISTINCT question.id
                 FROM questions question
                 JOIN tests test ON test.source_id = question.source_id
                 JOIN question_skills question_skill ON question_skill.question_id = question.id
@@ -255,10 +256,16 @@ def create_or_resume_session(database_url: str, student_id: str, payload: Sessio
                   AND question.status = 'approved'
                   AND question.review_status = 'approved'
                   AND test.subject_id = %s
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM item_exposures exposure
+                    WHERE exposure.student_id = %s
+                      AND exposure.question_id = question.id
+                  )
                 ORDER BY question.id
                 LIMIT %s
                 """,
-                (blueprint_row[7], item_count),
+                (blueprint_row[7], student_uuid, item_count),
             )
             question_rows = cursor.fetchall()
             if len(question_rows) < item_count:
@@ -302,6 +309,14 @@ def create_or_resume_session(database_url: str, student_id: str, payload: Sessio
                     """,
                     (session_row[0], question_row[0], position),
                 )
+                cursor.execute(
+                    """
+                    INSERT INTO item_exposures (student_id, question_id, session_id, purpose)
+                    VALUES (%s, %s, %s, 'diagnostic')
+                    ON CONFLICT (student_id, question_id, purpose) DO NOTHING
+                    """,
+                    (student_uuid, question_row[0], session_row[0]),
+                )
             return _load_session(cursor, student_uuid, str(session_row[0]))
 
 
@@ -339,7 +354,7 @@ def save_response(
     payload: ResponseSaveRequest,
     idempotency_key: str,
 ) -> ResponseSaveResult:
-    if not idempotency_key.strip():
+    if not idempotency_key.strip() or len(idempotency_key) > 255:
         raise AssessmentConflict("An Idempotency-Key header is required")
     student_uuid = _student_uuid(student_id)
     try:
