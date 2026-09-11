@@ -30,6 +30,14 @@ from .assessments import (
 from .content import ImportPreview, ImportPreviewRequest, SubjectSlug, preview_requested_exports
 from .content_import import ContentImportRequest, ContentImportResult, import_canonical_export
 from .errors import http_exception_handler, unhandled_exception_handler, validation_exception_handler
+from .issues import (
+    IssueError,
+    IssueNotFound,
+    IssueReport,
+    IssueReportRequest,
+    IssueUnavailable,
+    create_issue_report,
+)
 from .remediation import (
     PracticeSet,
     PracticeSetCreateRequest,
@@ -320,6 +328,41 @@ def _progress_http_error(exc: ProgressError) -> HTTPException:
     if isinstance(exc, ProgressNotFound):
         return HTTPException(status_code=404, detail=str(exc))
     return HTTPException(status_code=503, detail=str(exc))
+
+
+def _issue_database_url() -> str:
+    database_url = get_settings().database_url
+    if not database_url:
+        raise HTTPException(status_code=503, detail="API database is not configured")
+    return database_url
+
+
+def _issue_http_error(exc: IssueError) -> HTTPException:
+    if isinstance(exc, IssueNotFound):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, IssueUnavailable):
+        return HTTPException(status_code=503, detail=str(exc))
+    return HTTPException(status_code=503, detail="Issue report could not be saved")
+
+
+@app.post(
+    "/v1/issue-reports",
+    response_model=IssueReport,
+    tags=["issues"],
+)
+async def report_issue(
+    payload: IssueReportRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> IssueReport:
+    try:
+        return await run_in_threadpool(
+            create_issue_report,
+            _issue_database_url(),
+            user.id,
+            payload,
+        )
+    except IssueError as exc:
+        raise _issue_http_error(exc) from exc
 
 
 @app.get(

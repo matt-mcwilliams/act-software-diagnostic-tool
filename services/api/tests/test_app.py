@@ -155,3 +155,43 @@ def test_remediation_cycle_requires_a_configured_database() -> None:
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "request_failed"
+
+
+def test_issue_reports_require_authentication() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/issue-reports",
+            json={
+                "entity_type": "diagnosis",
+                "entity_id": "00000000-0000-0000-0000-000000000001",
+                "category": "diagnosis",
+                "description": "This did not look relevant.",
+            },
+        )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+
+
+def test_issue_reports_require_a_configured_database() -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("ACT_API_ALLOW_TEST_USER", "true")
+    get_settings.cache_clear()
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/issue-reports",
+                headers={"authorization": "Bearer prototype-test-token"},
+                json={
+                    "entity_type": "diagnosis",
+                    "entity_id": "00000000-0000-0000-0000-000000000001",
+                    "category": "diagnosis",
+                    "description": "This did not look relevant.",
+                },
+            )
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "request_failed"
