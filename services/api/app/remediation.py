@@ -21,6 +21,7 @@ from .assessments import (
     _item_count,
     _load_session,
 )
+from .content import SubjectSlug
 
 RemediationStatus = Literal[
     "recommended",
@@ -69,8 +70,18 @@ class RemediationCycleCreateRequest(BaseModel):
         return self
 
 
+class LearningResource(BaseModel):
+    id: str
+    provider: str
+    title: str
+    url: str
+    resource_type: str
+    focus_note: str | None = None
+
+
 class RemediationCycle(BaseModel):
     id: str
+    subject: SubjectSlug
     skill_id: str
     skill_key: str
     skill_name: str
@@ -80,6 +91,10 @@ class RemediationCycle(BaseModel):
     attempt_number: int = Field(ge=1)
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    resources: list[LearningResource] = Field(default_factory=list)
+    practice_set_id: str | None = None
+    practice_session_id: str | None = None
+    reassessment_session_id: str | None = None
 
 
 class ResourceEventRequest(BaseModel):
@@ -164,9 +179,11 @@ def _load_cycle(cursor: Any, student_id: UUID, cycle_id: UUID) -> RemediationCyc
         SELECT cycle.id, cycle.skill_id, skill.external_key, skill.name,
                cycle.recommendation_id, cycle.status::text,
                cycle.baseline_snapshot_id, cycle.attempt_number,
-               cycle.started_at, cycle.completed_at
+               cycle.started_at, cycle.completed_at, subject.slug
         FROM remediation_cycles cycle
         JOIN skills skill ON skill.id = cycle.skill_id
+        JOIN taxonomy_versions taxonomy ON taxonomy.id = skill.taxonomy_version_id
+        JOIN subjects subject ON subject.id = taxonomy.subject_id
         WHERE cycle.id = %s AND cycle.student_id = %s
         """,
         (cycle_id, student_id),
@@ -174,8 +191,51 @@ def _load_cycle(cursor: Any, student_id: UUID, cycle_id: UUID) -> RemediationCyc
     row = cursor.fetchone()
     if not row:
         raise RemediationNotFound("Remediation cycle was not found")
+    cursor.execute(
+        """
+        SELECT id, provider, title, url, resource_type, focus_note
+        FROM learning_resources
+        WHERE skill_id = %s AND status = 'approved'
+        ORDER BY id
+        """,
+        (row[1],),
+    )
+    resources = [
+        LearningResource(
+            id=str(resource[0]),
+            provider=str(resource[1]),
+            title=str(resource[2]),
+            url=str(resource[3]),
+            resource_type=str(resource[4]),
+            focus_note=resource[5],
+        )
+        for resource in cursor.fetchall()
+    ]
+    cursor.execute(
+        """
+        SELECT id, assessment_session_id
+        FROM practice_sets
+        WHERE cycle_id = %s
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (cycle_id,),
+    )
+    practice_row = cursor.fetchone()
+    cursor.execute(
+        """
+        SELECT assessment_session_id
+        FROM reassessment_links
+        WHERE cycle_id = %s
+        ORDER BY attempt_number DESC, assessment_session_id DESC
+        LIMIT 1
+        """,
+        (cycle_id,),
+    )
+    reassessment_row = cursor.fetchone()
     return RemediationCycle(
         id=str(row[0]),
+        subject=row[10],
         skill_id=str(row[1]),
         skill_key=str(row[2]),
         skill_name=str(row[3]),
@@ -185,6 +245,10 @@ def _load_cycle(cursor: Any, student_id: UUID, cycle_id: UUID) -> RemediationCyc
         attempt_number=int(row[7]),
         started_at=row[8],
         completed_at=row[9],
+        resources=resources,
+        practice_set_id=str(practice_row[0]) if practice_row else None,
+        practice_session_id=str(practice_row[1]) if practice_row and practice_row[1] else None,
+        reassessment_session_id=str(reassessment_row[0]) if reassessment_row else None,
     )
 
 

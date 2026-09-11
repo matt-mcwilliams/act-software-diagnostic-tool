@@ -113,9 +113,11 @@ export interface FastApiRemediationCycle {
 export interface FastApiPracticeSet {
   id: string;
   cycle_id: string;
-  session_id: string;
+  assessment_session_id: string;
   status: "created" | "in_progress" | "completed";
   target_count: number;
   assembly_version: string;
-  items: FastApiAssessmentItem[];
+  created_at: string;
+  completed_at: string | null;
+  assessment_session: FastApiAssessmentSession;
 }

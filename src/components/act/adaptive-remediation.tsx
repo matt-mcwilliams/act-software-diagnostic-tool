@@ -132,7 +132,7 @@ function FastApiLearnView({ subject, skillId }: { subject: Subject; skillId: str
         if (!response.ok) throw new Error(await responseError(response, "Targeted practice is not ready yet."));
         const practiceSet = await response.json() as FastApiPracticeSet;
         const cycleResponse = await fetch(`/api/assessment/cycles/${cycle.id}`, { cache: "no-store" });
-        nextCycle = cycleResponse.ok ? await cycleResponse.json() as FastApiRemediationCycle : { ...cycle, practice_set_id: practiceSet.id, practice_session_id: practiceSet.session_id };
+        nextCycle = cycleResponse.ok ? await cycleResponse.json() as FastApiRemediationCycle : { ...cycle, practice_set_id: practiceSet.id, practice_session_id: practiceSet.assessment_session_id };
         setCycle(nextCycle);
         window.localStorage.setItem(cycleKey(subject, skillId), nextCycle.id);
       }
@@ -269,7 +269,7 @@ function FastApiPracticeView({ subject, skillId }: { subject: Subject; skillId: 
     );
   }
 
-  return <FastApiSessionPlayer session={practiceSetToSession(practiceSet, subject)} eyebrow="Targeted practice" heading="Try the idea without help." description="Practice responses are scored after you submit the set. Feedback stays separate from the unseen reassessment." submitLabel="Submit practice" submittingLabel="Scoring…" onSubmitted={finishPractice} />;
+  return <FastApiSessionPlayer session={practiceSet.assessment_session} eyebrow="Targeted practice" heading="Try the idea without help." description="Practice responses are scored after you submit the set. Feedback stays separate from the unseen reassessment." submitLabel="Submit practice" submittingLabel="Scoring…" onSubmitted={finishPractice} />;
 }
 
 function FastApiReassessmentView({ subject, skillId }: { subject: Subject; skillId: string }) {
@@ -345,18 +345,6 @@ function FastApiReassessmentView({ subject, skillId }: { subject: Subject; skill
   }
 
   return <FastApiSessionPlayer session={{ ...session, purpose: "reassessment" }} eyebrow="Unseen reassessment" heading="What transferred?" description="These questions are separate from practice. Feedback will appear after you submit the set." submitLabel="Submit reassessment" submittingLabel="Scoring…" onSubmitted={finishReassessment} />;
-}
-
-function practiceSetToSession(practiceSet: FastApiPracticeSet, subject: Subject): FastApiAssessmentSession {
-  return {
-    id: practiceSet.session_id,
-    subject,
-    purpose: "practice",
-    status: practiceSet.status === "completed" ? "scored" : "in_progress",
-    items: practiceSet.items,
-    answers: {},
-    revisions: {},
-  };
 }
 
 function formatStatus(value: string) {

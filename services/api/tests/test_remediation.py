@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from app.assessments import AssessmentItem, AssessmentSession, PublicChoice
 from app.remediation import (
+    LearningResource,
     PracticeSet,
     PracticeSetCreateRequest,
     RemediationCycleCreateRequest,
@@ -85,6 +86,19 @@ def test_practice_set_reuses_public_assessment_shapes_without_answer_keys() -> N
     assert "is_correct" not in serialized
     assert "answer_key" not in serialized
     assert "correct_answer" not in serialized
+
+
+def test_learning_resource_is_public_metadata_only() -> None:
+    resource = LearningResource(
+        id=str(uuid4()),
+        provider="Khan Academy",
+        title="Punctuation",
+        url="https://example.com/punctuation",
+        resource_type="lesson",
+    )
+
+    assert resource.focus_note is None
+    assert "answer" not in resource.model_dump_json()
 
 
 def test_invalid_authenticated_identity_is_unavailable() -> None:
