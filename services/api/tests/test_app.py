@@ -195,3 +195,25 @@ def test_issue_reports_require_a_configured_database() -> None:
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "request_failed"
+
+
+def test_pilot_export_requires_reviewer_access() -> None:
+    with TestClient(app) as client:
+        response = client.get("/v1/internal/experiments/pilot-2026/export")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+
+
+def test_pilot_export_requires_a_configured_database() -> None:
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        id="reviewer-test", role="reviewer"
+    )
+    try:
+        with TestClient(app) as client:
+            response = client.get("/v1/internal/experiments/pilot-2026/export")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "request_failed"

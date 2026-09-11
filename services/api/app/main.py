@@ -10,6 +10,13 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .auth import CurrentUser, get_current_user, require_reviewer
+from .analytics import (
+    AnalyticsError,
+    AnalyticsNotFound,
+    AnalyticsUnavailable,
+    PilotExport,
+    export_pilot_data,
+)
 from .assessments import (
     AssessmentConflict,
     AssessmentNotFound,
@@ -343,6 +350,37 @@ def _issue_http_error(exc: IssueError) -> HTTPException:
     if isinstance(exc, IssueUnavailable):
         return HTTPException(status_code=503, detail=str(exc))
     return HTTPException(status_code=503, detail="Issue report could not be saved")
+
+
+def _analytics_http_error(exc: AnalyticsError) -> HTTPException:
+    if isinstance(exc, AnalyticsNotFound):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, AnalyticsUnavailable):
+        return HTTPException(status_code=503, detail=str(exc))
+    return HTTPException(status_code=503, detail="Pilot export could not be generated")
+
+
+@app.get(
+    "/v1/internal/experiments/{experiment_key}/export",
+    response_model=PilotExport,
+    tags=["internal-analytics"],
+)
+async def experiment_export(
+    experiment_key: str,
+    _: CurrentUser = Depends(require_reviewer),
+) -> PilotExport:
+    settings = get_settings()
+    if not settings.database_url:
+        raise HTTPException(status_code=503, detail="API database is not configured")
+    try:
+        return await run_in_threadpool(
+            export_pilot_data,
+            settings.database_url,
+            settings.export_pseudonym_secret,
+            experiment_key,
+        )
+    except AnalyticsError as exc:
+        raise _analytics_http_error(exc) from exc
 
 
 @app.post(
