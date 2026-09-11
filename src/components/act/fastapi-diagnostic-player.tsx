@@ -33,7 +33,7 @@ export function FastApiDiagnosticPlayer({ subject }: { subject: Subject }) {
   const revisionsRef = useRef<Record<string, number>>({});
   const sessionIdRef = useRef("");
   const saveQueues = useRef<Record<string, Promise<void>>>({});
-  const saveFailureRef = useRef(false);
+  const saveFailures = useRef(new Set<string>());
 
   useEffect(() => {
     let active = true;
@@ -107,10 +107,11 @@ export function FastApiDiagnosticPlayer({ subject }: { subject: Subject }) {
         if (!response.ok) throw new Error(await responseError(response, "Your answer could not be saved."));
         const saved = await response.json() as { client_revision: number };
         revisionsRef.current = { ...revisionsRef.current, [question.id]: saved.client_revision };
+        saveFailures.current.delete(question.id);
         setSaveState("saved");
       })
       .catch((saveError: unknown) => {
-        saveFailureRef.current = true;
+        saveFailures.current.add(question.id);
         setSaveState("error");
         setError(saveError instanceof Error ? saveError.message : "Your answer could not be saved.");
       });
@@ -123,7 +124,7 @@ export function FastApiDiagnosticPlayer({ subject }: { subject: Subject }) {
     setStatus("submitting");
     setError("");
     await Promise.all(Object.values(saveQueues.current));
-    if (saveFailureRef.current) {
+    if (saveFailures.current.size > 0) {
       setError("Your answers could not be synchronized. Check your connection and try again.");
       setSaveState("error");
       setStatus("ready");
