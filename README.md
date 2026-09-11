@@ -90,6 +90,7 @@ services/api/             FastAPI identity/operations boundary and SQL schema
 content/exports/          Canonical ACT taxonomy/content artifacts
 tests/                    Playwright smoke coverage
 docs/adr/                 Architecture decisions
+docs/runbooks/            Backup/restore and pilot operations runbooks
 ```
 
 ## Pilot work still required

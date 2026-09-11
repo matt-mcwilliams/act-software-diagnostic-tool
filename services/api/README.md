@@ -128,3 +128,6 @@ pnpm api:migrate
 
 Applied migrations are recorded with a SHA-256 checksum. Re-running is a
 no-op; changing an already-applied file stops with an error.
+
+For backup, restore rehearsal, and migration rollback steps, see
+[`docs/runbooks/api-backup-restore.md`](../../docs/runbooks/api-backup-restore.md).
