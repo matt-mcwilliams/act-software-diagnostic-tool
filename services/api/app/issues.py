@@ -12,6 +12,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 IssueEntityType = Literal["diagnosis", "question", "resource", "explanation"]
+IssueStatus = Literal["open", "in_review", "resolved", "dismissed"]
 
 
 class IssueError(Exception):
@@ -46,11 +47,26 @@ class IssueReportRequest(BaseModel):
 class IssueReport(BaseModel):
     id: str
     entity_type: IssueEntityType
-    entity_id: str
+    entity_id: str | None
     category: str
     description: str
-    status: Literal["open", "in_review", "resolved", "dismissed"]
+    status: IssueStatus
     created_at: datetime
+
+
+class IssueResolutionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["resolved", "dismissed"]
+    resolution: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("resolution")
+    @classmethod
+    def non_blank_resolution(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("resolution must not be blank")
+        return value
 
 
 def _student_uuid(student_id: str) -> UUID:
@@ -152,7 +168,7 @@ def create_issue_report(
                 return IssueReport(
                     id=str(row[0]),
                     entity_type=row[1],
-                    entity_id=str(row[2]),
+                    entity_id=str(row[2]) if row[2] else None,
                     category=str(row[3]),
                     description=str(row[4]),
                     status=row[5],
@@ -164,12 +180,109 @@ def create_issue_report(
         raise IssueUnavailable("Issue report could not be saved") from exc
 
 
+def _issue_uuid(value: str) -> UUID:
+    try:
+        return UUID(value)
+    except (TypeError, ValueError) as exc:
+        raise IssueNotFound("Issue report was not found") from exc
+
+
+def list_issue_reports(
+    database_url: str | None,
+    status: IssueStatus | None = None,
+) -> list[IssueReport]:
+    """List report metadata for reviewers without exposing reporter identity."""
+
+    try:
+        with _connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                if status:
+                    cursor.execute(
+                        """
+                        SELECT id, entity_type, entity_id, category, description,
+                               status, created_at
+                        FROM issue_reports
+                        WHERE status = %s
+                        ORDER BY created_at DESC, id DESC
+                        """,
+                        (status,),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT id, entity_type, entity_id, category, description,
+                               status, created_at
+                        FROM issue_reports
+                        ORDER BY created_at DESC, id DESC
+                        """
+                    )
+                return [
+                    IssueReport(
+                        id=str(row[0]),
+                        entity_type=row[1],
+                        entity_id=str(row[2]) if row[2] else None,
+                        category=str(row[3]),
+                        description=str(row[4]),
+                        status=row[5],
+                        created_at=row[6],
+                    )
+                    for row in cursor.fetchall()
+                ]
+    except IssueError:
+        raise
+    except Exception as exc:
+        raise IssueUnavailable("Issue reports could not be loaded") from exc
+
+
+def resolve_issue_report(
+    database_url: str | None,
+    issue_id: str,
+    payload: IssueResolutionRequest,
+) -> IssueReport:
+    """Resolve or dismiss one report with an explicit reviewer decision."""
+
+    report_uuid = _issue_uuid(issue_id)
+    try:
+        with _connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE issue_reports
+                    SET status = %s, resolution = %s, resolved_at = now()
+                    WHERE id = %s
+                    RETURNING id, entity_type, entity_id, category, description,
+                              status, created_at
+                    """,
+                    (payload.status, payload.resolution, report_uuid),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    raise IssueNotFound("Issue report was not found")
+                return IssueReport(
+                    id=str(row[0]),
+                    entity_type=row[1],
+                    entity_id=str(row[2]) if row[2] else None,
+                    category=str(row[3]),
+                    description=str(row[4]),
+                    status=row[5],
+                    created_at=row[6],
+                )
+    except IssueError:
+        raise
+    except Exception as exc:
+        raise IssueUnavailable("Issue report could not be updated") from exc
+
+
 __all__ = [
     "IssueEntityType",
     "IssueError",
     "IssueNotFound",
     "IssueReport",
     "IssueReportRequest",
+    "IssueResolutionRequest",
+    "IssueStatus",
     "IssueUnavailable",
     "create_issue_report",
+    "list_issue_reports",
+    "resolve_issue_report",
 ]

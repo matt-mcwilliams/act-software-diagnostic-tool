@@ -42,8 +42,12 @@ from .issues import (
     IssueNotFound,
     IssueReport,
     IssueReportRequest,
+    IssueResolutionRequest,
+    IssueStatus,
     IssueUnavailable,
     create_issue_report,
+    list_issue_reports,
+    resolve_issue_report,
 )
 from .remediation import (
     PracticeSet,
@@ -397,6 +401,42 @@ async def report_issue(
             create_issue_report,
             _issue_database_url(),
             user.id,
+            payload,
+        )
+    except IssueError as exc:
+        raise _issue_http_error(exc) from exc
+
+
+@app.get(
+    "/v1/internal/issues",
+    response_model=list[IssueReport],
+    tags=["internal-issues"],
+)
+async def issue_queue(
+    status: IssueStatus | None = None,
+    _: CurrentUser = Depends(require_reviewer),
+) -> list[IssueReport]:
+    try:
+        return await run_in_threadpool(list_issue_reports, _issue_database_url(), status)
+    except IssueError as exc:
+        raise _issue_http_error(exc) from exc
+
+
+@app.patch(
+    "/v1/internal/issues/{issue_id}",
+    response_model=IssueReport,
+    tags=["internal-issues"],
+)
+async def update_issue(
+    issue_id: str,
+    payload: IssueResolutionRequest,
+    _: CurrentUser = Depends(require_reviewer),
+) -> IssueReport:
+    try:
+        return await run_in_threadpool(
+            resolve_issue_report,
+            _issue_database_url(),
+            issue_id,
             payload,
         )
     except IssueError as exc:

@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.issues import IssueReport, IssueReportRequest
+from app.issues import IssueReport, IssueReportRequest, IssueResolutionRequest
 
 
 def test_issue_report_request_strips_text_and_rejects_extra_fields() -> None:
@@ -58,3 +58,13 @@ def test_issue_response_excludes_reporter_identity_and_resolution_fields() -> No
     serialized = report.model_dump_json()
     assert "reporter_id" not in serialized
     assert "resolution" not in serialized
+
+
+def test_issue_resolution_requires_a_non_blank_safe_decision() -> None:
+    resolution = IssueResolutionRequest(status="resolved", resolution="  Link fixed. ")
+
+    assert resolution.resolution == "Link fixed."
+    with pytest.raises(ValidationError):
+        IssueResolutionRequest(status="open", resolution="not a terminal decision")
+    with pytest.raises(ValidationError):
+        IssueResolutionRequest(status="dismissed", resolution=" ")
