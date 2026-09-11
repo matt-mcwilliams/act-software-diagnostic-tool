@@ -7,6 +7,7 @@ function buildTargetPath(segments: string[]) {
   if (segments.length === 1 && segments[0] === "sessions") return "/v1/assessment-sessions";
   if (segments.length === 1 && segments[0] === "cycles") return "/v1/remediation-cycles";
   if (segments.length === 1 && segments[0] === "practice-sets") return "/v1/practice-sets";
+  if (segments.length === 1 && segments[0] === "mastery") return "/v1/mastery";
   if (segments.length === 2 && segments[0] === "sessions") {
     return `/v1/assessment-sessions/${encodeURIComponent(segments[1])}`;
   }
@@ -32,6 +33,9 @@ function buildTargetPath(segments: string[]) {
   if (segments.length === 3 && segments[0] === "practice-sets" && segments[2] === "complete") {
     return `/v1/practice-sets/${encodeURIComponent(segments[1])}/complete`;
   }
+  if (segments.length === 3 && segments[0] === "mastery" && segments[2] === "history") {
+    return `/v1/mastery/${encodeURIComponent(segments[1])}/history`;
+  }
   return null;
 }
 
@@ -41,7 +45,9 @@ async function handle(request: Request, context: RouteContext) {
   if (!targetPath) return Response.json({ error: { code: "not_found", message: "Assessment route not found." } }, { status: 404 });
 
   const requestUrl = new URL(request.url);
-  const query = path.length === 1 && path[0] === "diagnostics" ? requestUrl.search : "";
+  const queryable = path.length === 1 && ["diagnostics", "mastery", "cycles"].includes(path[0]);
+  const subject = queryable ? requestUrl.searchParams.get("subject") : null;
+  const query = subject === "english" || subject === "math" ? `?subject=${subject}` : "";
   const body = ["GET", "HEAD"].includes(request.method) ? undefined : await request.text();
   const headers = new Headers();
   const contentType = request.headers.get("content-type");

@@ -121,3 +121,28 @@ export interface FastApiPracticeSet {
   completed_at: string | null;
   assessment_session: FastApiAssessmentSession;
 }
+
+export interface FastApiMasteryResponse {
+  subject: "english" | "math";
+  snapshots: FastApiMasterySnapshot[];
+  recommendations: FastApiRecommendation[];
+}
+
+export interface FastApiSkillHistory {
+  skill_id: string;
+  skill_key: string;
+  skill_name: string;
+  snapshots: FastApiMasterySnapshot[];
+}
+
+export interface FastApiRemediationCycleSummary {
+  id: string;
+  subject: "english" | "math";
+  skill_id: string;
+  skill_key: string;
+  skill_name: string;
+  status: FastApiRemediationStatus;
+  attempt_number: number;
+  started_at: string | null;
+  completed_at: string | null;
+}
