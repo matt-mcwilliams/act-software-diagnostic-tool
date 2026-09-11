@@ -53,8 +53,10 @@ curl -X POST http://127.0.0.1:8000/v1/internal/imports \
   -d '{"subject":"english"}'
 ```
 
-Imports are source-hash idempotent and create draft/pending-review content.
-They do not make raw canonical content assignable or expose it in the result.
+Imports are source-hash idempotent and create draft/pending-review content plus
+draft diagnostic, practice, and reassessment blueprints. They do not make raw
+canonical content assignable or expose it in the result; a reviewer must still
+complete the rights/content review and approve the inventory and blueprints.
 
 Student assessment endpoints are enabled only when PostgreSQL contains an
 approved blueprint and approved, rights-cleared question inventory:

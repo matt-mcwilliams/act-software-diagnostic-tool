@@ -396,6 +396,28 @@ def import_canonical_export(
                             (choice_ids[label], skill_ids[skill_key], classification.get("rationale")),
                         )
 
+            blueprint_specs = (
+                ("diagnostic", 8),
+                ("practice", 5),
+                ("reassessment", 3),
+            )
+            for purpose, item_count in blueprint_specs:
+                cursor.execute(
+                    """
+                    INSERT INTO assessment_blueprints
+                      (subject_id, purpose, version, rules, status,
+                       scoring_version, mastery_model_version)
+                    VALUES (%s, %s, %s, %s, 'draft', 'raw-v1', 'beta-binomial-v1')
+                    ON CONFLICT (subject_id, purpose, version) DO NOTHING
+                    """,
+                    (
+                        subject_id,
+                        purpose,
+                        f"{taxonomy_version}-{purpose}-v1",
+                        Jsonb({"itemCount": item_count, "assemblyVersion": f"{purpose}-v1"}),
+                    ),
+                )
+
             cursor.execute(
                 "UPDATE import_batches SET status = 'imported' WHERE id = %s",
                 (batch_id,),
