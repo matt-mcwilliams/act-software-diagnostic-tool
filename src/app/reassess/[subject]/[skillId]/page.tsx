@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { ReassessmentView } from "@/components/act/reassessment-view";
+import { AdaptiveReassessmentView } from "@/components/act/adaptive-remediation";
 import type { Subject } from "@/lib/act/types";
 import { requirePilotUser } from "@/lib/supabase/guard";
 
@@ -8,5 +8,5 @@ export default async function ReassessmentPage({ params }: { params: Promise<{ s
   await requirePilotUser();
   const { subject, skillId } = await params;
   if (subject !== "english" && subject !== "math") notFound();
-  return <ReassessmentView subject={subject as Subject} skillId={skillId} />;
+  return <AdaptiveReassessmentView subject={subject as Subject} skillId={skillId} />;
 }

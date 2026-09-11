@@ -192,9 +192,12 @@ function BackendResultsView({ result }: { result: FastApiAssessmentResult }) {
                   <p className="mt-5 max-w-2xl text-sm leading-6 text-slate-600">{recommendation.explanation}</p>
                   <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-4">
                     <p className="text-xs text-slate-500">{snapshot ? `Evidence: ${snapshot.correct_count} correct · ${snapshot.incorrect_count} incorrect` : "Evidence recorded in the durable profile"}</p>
-                    <span className={`text-xs font-semibold ${recommendation.readiness ? "text-emerald-800" : "text-slate-500"}`}>
-                      {recommendation.readiness ? "Learning path ready" : "Learning path pending review"}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-4">
+                      <span className={`text-xs font-semibold ${recommendation.readiness ? "text-emerald-800" : "text-slate-500"}`}>
+                        {recommendation.readiness ? "Learning path ready" : "Learning path pending review"}
+                      </span>
+                      <Link href={`/learn/${result.subject}/${recommendation.skill_id}`} className="inline-flex h-9 items-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800">Open learning</Link>
+                    </div>
                   </div>
                 </article>
               );
