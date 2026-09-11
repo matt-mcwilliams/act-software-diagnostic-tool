@@ -42,6 +42,7 @@ from .assessments import (
     submit_session,
 )
 from .content import ImportPreview, ImportPreviewRequest, SubjectSlug, preview_requested_exports
+from .content_ops import ContentOpsError, ContentOpsUnavailable, InventoryReadiness, list_inventory_readiness
 from .content_import import ContentImportRequest, ContentImportResult, import_canonical_export
 from .content_review import (
     ContentReviewConflict,
@@ -417,6 +418,31 @@ def _content_review_database_url() -> str:
     if not database_url:
         raise HTTPException(status_code=503, detail="API database is not configured")
     return database_url
+
+
+def _content_ops_http_error(exc: ContentOpsError) -> HTTPException:
+    if isinstance(exc, ContentOpsUnavailable):
+        return HTTPException(status_code=503, detail=str(exc))
+    return HTTPException(status_code=503, detail="Content readiness could not be loaded")
+
+
+@app.get(
+    "/v1/internal/inventory/readiness",
+    response_model=list[InventoryReadiness],
+    tags=["internal-content"],
+)
+async def inventory_readiness(
+    subject: SubjectSlug | None = None,
+    _: CurrentUser = Depends(require_reviewer),
+) -> list[InventoryReadiness]:
+    try:
+        return await run_in_threadpool(
+            list_inventory_readiness,
+            _content_review_database_url(),
+            subject,
+        )
+    except ContentOpsError as exc:
+        raise _content_ops_http_error(exc) from exc
 
 
 @app.post(

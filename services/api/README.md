@@ -100,6 +100,7 @@ only lifecycle and count metadata:
 POST  /v1/internal/content/{blueprint_id}/reviews
 GET   /v1/internal/issues?status=open
 PATCH /v1/internal/issues/{issue_id}
+GET   /v1/internal/inventory/readiness?subject=english
 GET   /v1/internal/experiments/{experiment_key}/export
 ```
 
