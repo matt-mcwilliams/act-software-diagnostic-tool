@@ -93,8 +93,12 @@ export async function proxyFastApi(path: string, init: RequestInit = {}) {
   const responseHeaders = new Headers();
   const contentType = response.headers.get("content-type");
   const requestId = response.headers.get("x-request-id");
+  const retryAfter = response.headers.get("retry-after");
+  const rateLimit = response.headers.get("x-ratelimit-limit");
   if (contentType) responseHeaders.set("content-type", contentType);
   if (requestId) responseHeaders.set("x-request-id", requestId);
+  if (retryAfter) responseHeaders.set("retry-after", retryAfter);
+  if (rateLimit) responseHeaders.set("x-ratelimit-limit", rateLimit);
   responseHeaders.set("cache-control", "no-store");
   return new Response(await response.text(), {
     status: response.status,
