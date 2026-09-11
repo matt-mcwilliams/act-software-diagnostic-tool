@@ -30,6 +30,27 @@ from .assessments import (
 from .content import ImportPreview, ImportPreviewRequest, SubjectSlug, preview_requested_exports
 from .content_import import ContentImportRequest, ContentImportResult, import_canonical_export
 from .errors import http_exception_handler, unhandled_exception_handler, validation_exception_handler
+from .remediation import (
+    PracticeSet,
+    PracticeSetCreateRequest,
+    RemediationConflict,
+    RemediationCycle,
+    RemediationCycleCreateRequest,
+    RemediationError,
+    RemediationNotFound,
+    RemediationUnavailable,
+    ReassessmentSessionCreateRequest,
+    ResourceEvent,
+    ResourceEventRequest,
+    complete_practice_set,
+    create_practice_set,
+    create_reassessment_session,
+    create_remediation_cycle,
+    get_practice_set,
+    get_reassessment_session,
+    get_remediation_cycle,
+    record_resource_event,
+)
 from .settings import get_settings
 
 logger = logging.getLogger("act_adaptive_api")
@@ -260,3 +281,184 @@ async def assessment_session_results(
         raise HTTPException(status_code=404, detail="Assessment results were not found") from exc
     except AssessmentUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _remediation_database_url() -> str:
+    database_url = get_settings().database_url
+    if not database_url:
+        raise HTTPException(status_code=503, detail="API database is not configured")
+    return database_url
+
+
+def _remediation_http_error(exc: RemediationError) -> HTTPException:
+    if isinstance(exc, RemediationNotFound):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, RemediationConflict):
+        return HTTPException(status_code=409, detail=str(exc))
+    return HTTPException(status_code=503, detail=str(exc))
+
+
+@app.post(
+    "/v1/remediation-cycles",
+    response_model=RemediationCycle,
+    tags=["remediation"],
+)
+async def start_remediation_cycle(
+    payload: RemediationCycleCreateRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> RemediationCycle:
+    try:
+        return await run_in_threadpool(
+            create_remediation_cycle,
+            _remediation_database_url(),
+            user.id,
+            payload,
+        )
+    except RemediationError as exc:
+        raise _remediation_http_error(exc) from exc
+
+
+@app.get(
+    "/v1/remediation-cycles/{cycle_id}",
+    response_model=RemediationCycle,
+    tags=["remediation"],
+)
+async def remediation_cycle(
+    cycle_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> RemediationCycle:
+    try:
+        return await run_in_threadpool(
+            get_remediation_cycle,
+            _remediation_database_url(),
+            user.id,
+            cycle_id,
+        )
+    except RemediationError as exc:
+        raise _remediation_http_error(exc) from exc
+
+
+@app.post(
+    "/v1/remediation-cycles/{cycle_id}/resource-events",
+    response_model=ResourceEvent,
+    tags=["remediation"],
+)
+async def remediation_resource_event(
+    cycle_id: str,
+    payload: ResourceEventRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> ResourceEvent:
+    try:
+        return await run_in_threadpool(
+            record_resource_event,
+            _remediation_database_url(),
+            user.id,
+            cycle_id,
+            payload,
+        )
+    except RemediationError as exc:
+        raise _remediation_http_error(exc) from exc
+
+
+@app.post(
+    "/v1/remediation-cycles/{cycle_id}/practice-sets",
+    response_model=PracticeSet,
+    tags=["remediation"],
+)
+async def remediation_practice_set(
+    cycle_id: str,
+    payload: PracticeSetCreateRequest | None = None,
+    user: CurrentUser = Depends(get_current_user),
+) -> PracticeSet:
+    try:
+        return await run_in_threadpool(
+            create_practice_set,
+            _remediation_database_url(),
+            user.id,
+            cycle_id,
+            payload,
+        )
+    except RemediationError as exc:
+        raise _remediation_http_error(exc) from exc
+
+
+@app.get(
+    "/v1/practice-sets/{practice_set_id}",
+    response_model=PracticeSet,
+    tags=["remediation"],
+)
+async def practice_set(
+    practice_set_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> PracticeSet:
+    try:
+        return await run_in_threadpool(
+            get_practice_set,
+            _remediation_database_url(),
+            user.id,
+            practice_set_id,
+        )
+    except RemediationError as exc:
+        raise _remediation_http_error(exc) from exc
+
+
+@app.post(
+    "/v1/practice-sets/{practice_set_id}/complete",
+    response_model=PracticeSet,
+    tags=["remediation"],
+)
+async def finish_practice_set(
+    practice_set_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> PracticeSet:
+    try:
+        return await run_in_threadpool(
+            complete_practice_set,
+            _remediation_database_url(),
+            user.id,
+            practice_set_id,
+        )
+    except RemediationError as exc:
+        raise _remediation_http_error(exc) from exc
+
+
+@app.post(
+    "/v1/remediation-cycles/{cycle_id}/reassessments",
+    response_model=AssessmentSession,
+    tags=["remediation"],
+)
+async def remediation_reassessment(
+    cycle_id: str,
+    payload: ReassessmentSessionCreateRequest | None = None,
+    user: CurrentUser = Depends(get_current_user),
+) -> AssessmentSession:
+    try:
+        return await run_in_threadpool(
+            create_reassessment_session,
+            _remediation_database_url(),
+            user.id,
+            cycle_id,
+            payload,
+        )
+    except RemediationError as exc:
+        raise _remediation_http_error(exc) from exc
+
+
+@app.get(
+    "/v1/remediation-cycles/{cycle_id}/reassessments",
+    response_model=AssessmentSession,
+    tags=["remediation"],
+)
+async def current_reassessment(
+    cycle_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> AssessmentSession:
+    try:
+        return await run_in_threadpool(
+            get_reassessment_session,
+            _remediation_database_url(),
+            user.id,
+            cycle_id,
+        )
+    except RemediationError as exc:
+        raise _remediation_http_error(exc) from exc
