@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import jwt
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .settings import Settings, get_settings
@@ -27,7 +27,6 @@ def _claims_to_user(claims: dict[str, Any]) -> CurrentUser:
 
 
 def get_current_user(
-    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     settings: Settings = Depends(get_settings),
 ) -> CurrentUser:
@@ -56,3 +55,9 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Bearer token is invalid or expired") from exc
 
     return _claims_to_user(claims)
+
+
+def require_reviewer(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    if user.role not in {"reviewer", "admin"}:
+        raise HTTPException(status_code=403, detail="Reviewer access is required")
+    return user

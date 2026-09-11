@@ -8,7 +8,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .auth import CurrentUser, get_current_user
+from .auth import CurrentUser, get_current_user, require_reviewer
+from .content import ImportPreview, ImportPreviewRequest, preview_requested_exports
 from .errors import http_exception_handler, unhandled_exception_handler, validation_exception_handler
 from .settings import get_settings
 
@@ -72,3 +73,16 @@ async def readiness() -> JSONResponse:
 @app.get("/v1/me", tags=["identity"])
 async def current_user(user: CurrentUser = Depends(get_current_user)) -> dict[str, str]:
     return {"id": user.id, "role": user.role}
+
+
+@app.post(
+    "/v1/internal/imports/preview",
+    response_model=list[ImportPreview],
+    tags=["internal-content"],
+)
+async def preview_content_import(
+    payload: ImportPreviewRequest,
+    _: CurrentUser = Depends(require_reviewer),
+) -> list[ImportPreview]:
+    """Validate canonical exports without writing content or returning item text."""
+    return preview_requested_exports(payload.subject)
