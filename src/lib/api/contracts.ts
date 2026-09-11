@@ -1,4 +1,5 @@
 export type FastApiChoiceId = "A" | "B" | "C" | "D";
+export type FastApiAssessmentPurpose = "diagnostic" | "practice" | "reassessment";
 
 export interface FastApiChoice {
   id: FastApiChoiceId;
@@ -17,7 +18,7 @@ export interface FastApiAssessmentItem {
 export interface FastApiAssessmentSession {
   id: string;
   subject: "english" | "math";
-  purpose: "diagnostic";
+  purpose: FastApiAssessmentPurpose;
   status: "created" | "in_progress" | "submitted" | "scoring" | "scored" | "expired" | "abandoned" | "failed";
   items: FastApiAssessmentItem[];
   answers: Record<string, FastApiChoiceId>;
@@ -64,7 +65,7 @@ export interface FastApiRecommendation {
 export interface FastApiAssessmentResult {
   session_id: string;
   subject: "english" | "math";
-  purpose: "diagnostic";
+  purpose: FastApiAssessmentPurpose;
   correct: number;
   answered: number;
   total: number;
@@ -73,4 +74,48 @@ export interface FastApiAssessmentResult {
   mastery_model_version: string;
   snapshots: FastApiMasterySnapshot[];
   recommendations: FastApiRecommendation[];
+}
+
+export interface FastApiLearningResource {
+  id: string;
+  provider: string;
+  title: string;
+  url: string;
+  resource_type: string;
+  focus_note: string | null;
+}
+
+export type FastApiRemediationStatus =
+  | "recommended"
+  | "learning"
+  | "practicing"
+  | "ready_to_reassess"
+  | "reassessing"
+  | "mastered"
+  | "repeat_recommended"
+  | "needs_more_evidence"
+  | "abandoned";
+
+export interface FastApiRemediationCycle {
+  id: string;
+  subject: "english" | "math";
+  skill_id: string;
+  skill_key: string;
+  skill_name: string;
+  status: FastApiRemediationStatus;
+  attempt_number: number;
+  resources: FastApiLearningResource[];
+  practice_set_id: string | null;
+  practice_session_id: string | null;
+  reassessment_session_id: string | null;
+}
+
+export interface FastApiPracticeSet {
+  id: string;
+  cycle_id: string;
+  session_id: string;
+  status: "created" | "in_progress" | "completed";
+  target_count: number;
+  assembly_version: string;
+  items: FastApiAssessmentItem[];
 }

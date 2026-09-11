@@ -5,6 +5,8 @@ type RouteContext = { params: Promise<{ path: string[] }> };
 function buildTargetPath(segments: string[]) {
   if (segments.length === 1 && segments[0] === "diagnostics") return "/v1/diagnostics";
   if (segments.length === 1 && segments[0] === "sessions") return "/v1/assessment-sessions";
+  if (segments.length === 1 && segments[0] === "cycles") return "/v1/remediation-cycles";
+  if (segments.length === 1 && segments[0] === "practice-sets") return "/v1/practice-sets";
   if (segments.length === 2 && segments[0] === "sessions") {
     return `/v1/assessment-sessions/${encodeURIComponent(segments[1])}`;
   }
@@ -17,6 +19,18 @@ function buildTargetPath(segments: string[]) {
     segments[2] === "responses"
   ) {
     return `/v1/assessment-sessions/${encodeURIComponent(segments[1])}/responses/${encodeURIComponent(segments[3])}`;
+  }
+  if (segments.length === 2 && segments[0] === "cycles") {
+    return `/v1/remediation-cycles/${encodeURIComponent(segments[1])}`;
+  }
+  if (segments.length === 3 && segments[0] === "cycles" && ["resource-events", "practice-sets", "reassessments"].includes(segments[2])) {
+    return `/v1/remediation-cycles/${encodeURIComponent(segments[1])}/${segments[2]}`;
+  }
+  if (segments.length === 2 && segments[0] === "practice-sets") {
+    return `/v1/practice-sets/${encodeURIComponent(segments[1])}`;
+  }
+  if (segments.length === 3 && segments[0] === "practice-sets" && segments[2] === "complete") {
+    return `/v1/practice-sets/${encodeURIComponent(segments[1])}/complete`;
   }
   return null;
 }
