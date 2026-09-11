@@ -26,14 +26,31 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install API dependencies
+        run: pnpm api:install
 
       - name: Lint
         run: pnpm lint
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Typecheck API modules
+        run: pnpm api:typecheck
+
+      - name: Test API
+        run: pnpm api:test
+
+      - name: Validate content exports
+        run: pnpm content:validate
 
       - name: Build
         run: pnpm build
