@@ -5,15 +5,19 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FastApiSessionPlayer } from "@/components/act/fastapi-session-player";
+import { PageFrame } from "@/components/act/page-frame";
 import type {
   FastApiAssessmentResult,
   FastApiAssessmentSession,
+  FastApiMasteryResponse,
   FastApiPracticeSet,
   FastApiRemediationCycle,
+  FastApiRemediationCycleSummary,
 } from "@/lib/api/contracts";
 import type { Subject } from "@/lib/act/types";
 import { LearnView } from "@/components/act/learn-view";
 import { PracticeView } from "@/components/act/practice-view";
+import { ProgressView } from "@/components/act/progress-view";
 import { ReassessmentView } from "@/components/act/reassessment-view";
 
 type AssessmentMode = "local" | "fastapi";
@@ -76,6 +80,80 @@ export function AdaptiveReassessmentView({ subject, skillId }: { subject: Subjec
   if (error) return <ModeMessage message={error} />;
   if (!mode) return <ModeMessage message="Preparing your reassessment…" status />;
   return mode === "fastapi" ? <FastApiReassessmentView subject={subject} skillId={skillId} /> : <ReassessmentView subject={subject} skillId={skillId} />;
+}
+
+export function AdaptiveProgressView() {
+  const { mode, error } = useAssessmentMode();
+  if (error) return <ModeMessage message={error} />;
+  if (!mode) return <ModeMessage message="Loading your progress…" status />;
+  return mode === "fastapi" ? <FastApiProgressView /> : <ProgressView />;
+}
+
+function FastApiProgressView() {
+  const [records, setRecords] = useState<Array<{ subject: Subject; mastery: FastApiMasteryResponse; cycles: FastApiRemediationCycleSummary[] }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    Promise.all(["english", "math"].map(async (subject) => {
+      const [masteryResponse, cyclesResponse] = await Promise.all([
+        fetch(`/api/assessment/mastery?subject=${subject}`, { cache: "no-store" }),
+        fetch(`/api/assessment/cycles?subject=${subject}`, { cache: "no-store" }),
+      ]);
+      if (!masteryResponse.ok || !cyclesResponse.ok) throw new Error("Your durable progress could not be loaded.");
+      return {
+        subject: subject as Subject,
+        mastery: await masteryResponse.json() as FastApiMasteryResponse,
+        cycles: await cyclesResponse.json() as FastApiRemediationCycleSummary[],
+      };
+    }))
+      .then((loadedRecords) => {
+        if (!active) return;
+        setRecords(loadedRecords);
+        setLoading(false);
+      })
+      .catch((loadError: unknown) => {
+        if (!active) return;
+        setError(loadError instanceof Error ? loadError.message : "Your durable progress could not be loaded.");
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (loading) return <ModeMessage message="Loading your progress…" status />;
+  if (error) return <ModeMessage message={error} />;
+
+  return (
+    <PageFrame>
+      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">Progress</p>
+      <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Keep the next step visible.</h1>
+      <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">This view stays intentionally small: current durable targets, active cycles, and a clear way back into the loop.</p>
+
+      <div className="mt-8 grid gap-6">
+        {records.map(({ subject, mastery, cycles }) => {
+          const snapshotBySkill = new Map(mastery.snapshots.map((snapshot) => [snapshot.skill_id, snapshot]));
+          const targets = mastery.recommendations.filter((recommendation) => (snapshotBySkill.get(recommendation.skill_id)?.effective_evidence ?? 0) > 0).slice(0, 3);
+          const activeCycles = cycles.filter((cycle) => !["mastered", "abandoned"].includes(cycle.status)).slice(0, 3);
+          return (
+            <section key={subject} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">{subject === "english" ? "English" : "Math"}</p>
+                  <h2 className="mt-2 text-xl font-semibold">{targets.length > 0 ? "Current priorities" : "No active targets yet"}</h2>
+                </div>
+                <Link href={`/results/${subject}`} className="text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline">Review results</Link>
+              </div>
+              {targets.length > 0 ? <div className="mt-5 space-y-3">{targets.map((recommendation) => { const snapshot = snapshotBySkill.get(recommendation.skill_id); return <div key={recommendation.skill_id} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3"><div><Link href={`/learn/${subject}/${recommendation.skill_id}`} className="font-medium text-slate-900 hover:underline">{recommendation.skill_name}</Link><p className="mt-1 text-xs text-slate-500">{snapshot ? `${snapshot.correct_count} correct · ${snapshot.incorrect_count} incorrect` : "Evidence recorded"}</p></div><span className="text-xs font-semibold text-slate-600">{formatStatus(snapshot?.classification ?? "developing")}</span></div>; })}</div> : <p className="mt-4 text-sm leading-6 text-slate-600">Complete a durable diagnostic to create a traceable skill profile.</p>}
+              {activeCycles.length > 0 ? <div className="mt-5 border-t border-slate-200 pt-4"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Active cycles</p><div className="mt-3 space-y-2">{activeCycles.map((cycle) => <p key={cycle.id} className="text-sm text-slate-700">{cycle.skill_name} <span className="text-xs text-slate-500">· {formatStatus(cycle.status)}</span></p>)}</div></div> : null}
+            </section>
+          );
+        })}
+      </div>
+    </PageFrame>
+  );
 }
 
 function FastApiLearnView({ subject, skillId }: { subject: Subject; skillId: string }) {
