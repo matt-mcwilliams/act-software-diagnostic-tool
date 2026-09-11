@@ -21,6 +21,9 @@ complexity.
   config is present; otherwise the app clearly runs in prototype mode.
 - Optional server-to-server FastAPI `/v1/me` verification when
   `ACT_API_BASE_URL` is configured alongside Supabase.
+- Optional FastAPI-backed diagnostic player with durable session resume,
+  answer autosave, submission, and mastery-aware results when approved API
+  content is available.
 - Reviewer-only canonical import preview and draft import endpoints with
   source-hash audit records.
 - Authenticated FastAPI diagnostic catalog, session start/resume, and
@@ -34,14 +37,13 @@ complexity.
 
 ## Prototype boundary
 
-The student flow currently stores session state in `localStorage`, and the
-demo question bank is authored prototype content mapped to IDs from the
-canonical taxonomy exports. It is not official ACT score-equivalent content.
-The FastAPI service is not yet wired into the browser flow's persistence path;
-the browser still uses local prototype routes. FastAPI now owns the planned
-domain boundary for canonical imports and has the first PostgreSQL-backed
-assessment session contract, which requires approved database content before
-it can serve a student session.
+Without `ACT_API_BASE_URL`, the student flow uses browser-local session state
+and the authored demo question bank mapped to IDs from the canonical taxonomy
+exports. It is not official ACT score-equivalent content. When the API base URL
+and Supabase configuration are present, the diagnostic route switches to the
+FastAPI session contract: PostgreSQL owns item assignment, answer revisions,
+submission, scoring, mastery, and result state. That mode requires an approved
+diagnostic blueprint and approved content in the API database.
 
 ## Local setup
 
@@ -53,8 +55,9 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000). Add Supabase variables to
 `.env.local` to enable magic-link access. Set `ACT_API_BASE_URL` as well when
-the configured pilot should verify the user with FastAPI. Without Supabase
-variables, choose “Continue in prototype mode” on `/sign-in`.
+the configured pilot should verify the user with FastAPI and use durable
+diagnostic sessions. Without Supabase variables, choose “Continue in prototype
+mode” on `/sign-in`.
 
 ## Commands
 
@@ -88,7 +91,8 @@ docs/adr/                 Architecture decisions
 
 ## Pilot work still required
 
-Before a real pilot, connect the student UI to the FastAPI session contract,
-add submit/scoring/mastery/remediation writes, approve a reviewed blueprint
-and inventory, add internal review/export tools, and complete the privacy,
-rights, accessibility, and backup/restore gates in `plan.md`.
+Before a real pilot, add FastAPI-backed practice, reassessment, remediation
+cycles, and minimal progress history; approve a reviewed blueprint and
+inventory; add internal review/export and issue-reporting tools; and complete
+the privacy, rights, accessibility, rate-limit, and backup/restore gates in
+`plan.md`.
