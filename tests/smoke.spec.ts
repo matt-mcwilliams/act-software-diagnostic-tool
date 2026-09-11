@@ -67,3 +67,19 @@ test("diagnostic content does not include answer keys", async ({ request }) => {
   expect(body).not.toContain("failureModeByChoice");
   expect(body).not.toContain("explanation");
 });
+
+test("the shared diagnostic and results flow supports Math", async ({ page }) => {
+  await page.goto("/diagnostic/math");
+  await expect(page.getByText("Question 1 of 8")).toBeVisible({ timeout: 15000 });
+
+  for (let index = 0; index < 7; index += 1) {
+    await page.getByRole("radio").first().click();
+    await page.getByRole("button", { name: "Next question" }).click();
+  }
+  await page.getByRole("radio").first().click();
+  await page.getByRole("button", { name: "Submit diagnostic" }).click();
+  await page.waitForURL("**/results/math");
+  await expect(page.getByRole("heading", { name: "Here is what to work on next." })).toBeVisible();
+  await expect(page.getByText("Math results")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Learn this skill" }).first()).toBeVisible();
+});
