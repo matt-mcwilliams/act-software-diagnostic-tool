@@ -108,6 +108,13 @@ pseudonyms and cohort-level skill/completion facts, never names, emails,
 question text, response text, or answer keys. Keep the secret in `.env.local`
 or the deployment secret store; do not put it in a committed environment file.
 
+Protected and bulk `/v1` paths use the configured process-local rate limit
+(`ACT_API_RATE_LIMIT_REQUESTS` per
+`ACT_API_RATE_LIMIT_WINDOW_SECONDS`) and return `429` with `Retry-After` when
+the limit is exceeded. This is a first-prototype guard; enforce the same
+policy at the deployment edge or with a shared store before running multiple
+API workers or regions.
+
 Session items contain prompts and choices only. Response saves require an
 `Idempotency-Key` header and a monotonic `client_revision`; stale revisions
 return a conflict instead of overwriting newer work. New diagnostic sessions

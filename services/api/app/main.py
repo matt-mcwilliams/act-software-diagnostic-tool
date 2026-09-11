@@ -98,6 +98,7 @@ from .progress import (
     list_mastery,
     list_remediation_cycles,
 )
+from .rate_limit import rate_limiter
 from .settings import get_settings
 
 logger = logging.getLogger("act_adaptive_api")
@@ -127,6 +128,15 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 async def request_context(request: Request, call_next):
     request_id = request.headers.get("x-request-id") or str(uuid4())
     request.state.request_id = request_id
+    settings = get_settings()
+    limited_response = await rate_limiter.check(
+        request,
+        max_requests=settings.rate_limit_requests,
+        window_seconds=settings.rate_limit_window_seconds,
+    )
+    if limited_response:
+        limited_response.headers["x-request-id"] = request_id
+        return limited_response
     started = time.perf_counter()
     response = await call_next(request)
     duration_ms = (time.perf_counter() - started) * 1000
