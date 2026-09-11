@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     auth_jwt_audience: str = "authenticated"
     allow_test_user: bool = False
     database_url: str | None = None
+    export_pseudonym_secret: str | None = None
 
 
 @lru_cache
