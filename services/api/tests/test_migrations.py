@@ -19,6 +19,7 @@ def test_domain_migration_manifest_is_stable() -> None:
         "0001_domain_schema.sql",
         "0002_import_batches.sql",
         "0003_content_source_identity.sql",
+        "0004_practice_session_link.sql",
     ]
     assert all(len(migration_checksum(path)) == 64 for path in files)
     assert Path(files[0]).read_text(encoding="utf-8").count("CREATE TABLE") >= 20
