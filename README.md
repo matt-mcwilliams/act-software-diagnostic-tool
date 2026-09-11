@@ -36,6 +36,7 @@ pnpm api:install  # Install the FastAPI service and its test dependencies
 pnpm api:dev      # Start the FastAPI service
 pnpm api:test     # Run FastAPI tests
 pnpm api:typecheck # Compile-check FastAPI modules
+pnpm content:validate # Validate master content exports (dry run)
 pnpm db:generate  # Generate Drizzle migrations
 pnpm db:push      # Push the schema to PostgreSQL
 pnpm db:studio    # Open Drizzle Studio
