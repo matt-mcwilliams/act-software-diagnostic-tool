@@ -388,11 +388,30 @@ function FastApiPracticeView({ subject, skillId }: { subject: Subject; skillId: 
   if (loading) return <ModeMessage message="Loading targeted practice…" status />;
   if (error || !cycle || !practiceSet) return <ModeMessage message={error || "Targeted practice could not be loaded."} />;
   if (result || practiceSet.status === "completed") {
+    const questionBySessionItem = new Map(practiceSet.assessment_session.items.map((item) => [item.id, item]));
     return (
       <div>
         <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">Practice complete</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight">Ready for new questions?</h1>
         {result ? <p className="mt-4 text-base text-slate-700">You answered {result.correct} of {result.total} correctly.</p> : <p className="mt-4 text-sm leading-6 text-slate-600">This practice set is already complete. Your next questions will be unseen for this cycle.</p>}
+        {result ? (
+          <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">Practice feedback</h2>
+            <div className="mt-4 space-y-4">
+              {result.items.map((item, index) => {
+                const question = questionBySessionItem.get(item.session_item_id);
+                const summary = item.correct === true ? "Correct" : item.correct === false ? "Review this item" : "Not answered";
+                return (
+                  <div key={item.session_item_id} className="border-t border-slate-200 pt-4 first:border-t-0 first:pt-0">
+                    <p className="text-sm font-semibold text-slate-950">Question {index + 1}: {summary}</p>
+                    {question ? <p className="mt-1 text-sm leading-6 text-slate-700">{question.prompt}</p> : null}
+                    {item.explanation ? <p className="mt-2 text-sm leading-6 text-slate-600">{item.explanation}</p> : null}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
         <div className="mt-6 flex flex-wrap gap-3">
           <Link href={`/reassess/${subject}/${skillId}`} className="inline-flex h-10 items-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800">Start reassessment</Link>
           <Link href={`/learn/${subject}/${skillId}`} className="inline-flex h-10 items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-100">Back to learning</Link>

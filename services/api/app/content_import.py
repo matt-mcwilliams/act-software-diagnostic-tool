@@ -332,6 +332,7 @@ def import_canonical_export(
                                     "characterEnd",
                                     "reportingCategory",
                                     "isScored",
+                                    "explanation",
                                 )
                                 if key in question
                             }

@@ -30,6 +30,7 @@ export interface FastApiScoredItem {
   question_id: string;
   choice_id: FastApiChoiceId | null;
   correct: boolean | null;
+  explanation: string | null;
 }
 
 export interface FastApiMasterySnapshot {

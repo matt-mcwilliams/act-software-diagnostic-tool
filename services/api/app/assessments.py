@@ -82,6 +82,7 @@ class ScoredItem(BaseModel):
     question_id: str
     choice_id: ChoiceId | None
     correct: bool | None
+    explanation: str | None = None
 
 
 class AssessmentResult(BaseModel):
@@ -723,10 +724,23 @@ def submit_session(
                 cursor.execute(
                     """
                     SELECT item.id, item.question_id, choice.label,
-                           response.is_omitted, (choice.id = correct_choice.id)
+                           response.is_omitted, (choice.id = correct_choice.id),
+                           COALESCE(
+                             NULLIF(question.content ->> 'explanation', ''),
+                             selected_evidence.rationale
+                           )
                     FROM assessment_session_items item
                     JOIN responses response ON response.session_item_id = item.id
+                    JOIN questions question ON question.id = item.question_id
                     LEFT JOIN answer_choices choice ON choice.id = response.answer_choice_id
+                    LEFT JOIN LATERAL (
+                      SELECT evidence.rationale
+                      FROM choice_skill_evidence evidence
+                      WHERE evidence.answer_choice_id = choice.id
+                        AND evidence.rationale IS NOT NULL
+                      ORDER BY evidence.evidence_weight DESC, evidence.skill_id
+                      LIMIT 1
+                    ) selected_evidence ON TRUE
                     JOIN answer_choices correct_choice
                       ON correct_choice.question_id = item.question_id
                      AND correct_choice.is_correct = true
@@ -742,6 +756,7 @@ def submit_session(
                         question_id=str(row[1]),
                         choice_id=row[2] if row[2] in {"A", "B", "C", "D"} else None,
                         correct=None if row[3] else bool(row[4]),
+                        explanation=str(row[5]) if row[5] else None,
                     )
                     for row in item_rows
                 ]
