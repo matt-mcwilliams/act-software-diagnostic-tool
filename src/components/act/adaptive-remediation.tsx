@@ -162,6 +162,9 @@ function FastApiLearnView({ subject, skillId }: { subject: Subject; skillId: str
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [issueDescription, setIssueDescription] = useState("");
+  const [issueMessage, setIssueMessage] = useState("");
+  const [reportingIssue, setReportingIssue] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -231,6 +234,36 @@ function FastApiLearnView({ subject, skillId }: { subject: Subject; skillId: str
     });
   }
 
+  async function reportIssue() {
+    if (!cycle || !issueDescription.trim()) return;
+    const resource = cycle.resources[0];
+    setReportingIssue(true);
+    setIssueMessage("");
+    try {
+      const response = await fetch("/api/assessment/issues", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": requestId(),
+        },
+        body: JSON.stringify({
+          entity_type: resource ? "resource" : "diagnosis",
+          entity_id: resource?.id ?? cycle.id,
+          category: resource ? "resource" : "diagnosis",
+          description: issueDescription.trim(),
+        }),
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(await responseError(response, "The issue could not be recorded."));
+      setIssueDescription("");
+      setIssueMessage("Thanks — your report is recorded for pilot review.");
+    } catch (reportError: unknown) {
+      setIssueMessage(reportError instanceof Error ? reportError.message : "The issue could not be recorded.");
+    } finally {
+      setReportingIssue(false);
+    }
+  }
+
   if (loading) return <ModeMessage message="Loading the learning path…" status />;
   if (error && !cycle) return <ModeMessage message={error} />;
   if (!cycle) return <ModeMessage message="No learning path was found." />;
@@ -272,6 +305,24 @@ function FastApiLearnView({ subject, skillId }: { subject: Subject; skillId: str
         </section>
 
         {error ? <p className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900" role="alert">{error}</p> : null}
+        <section className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-5">
+          <h2 className="text-sm font-semibold text-slate-950">Something look wrong?</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Tell the pilot team about a broken resource, confusing explanation, or diagnosis concern.</p>
+          <label htmlFor="issue-description" className="sr-only">Issue description</label>
+          <textarea
+            id="issue-description"
+            value={issueDescription}
+            onChange={(event) => setIssueDescription(event.target.value)}
+            placeholder="What should we review?"
+            maxLength={2000}
+            rows={3}
+            className="mt-3 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-emerald-700 placeholder:text-slate-400 focus:ring-2"
+          />
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={reportIssue} disabled={reportingIssue || !issueDescription.trim()} className="inline-flex h-10 items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-50">{reportingIssue ? "Recording…" : "Report a problem"}</button>
+            {issueMessage ? <p className="text-sm text-emerald-800" role="status">{issueMessage}</p> : null}
+          </div>
+        </section>
         <button type="button" onClick={startPractice} disabled={busy} className="mt-6 inline-flex h-11 items-center rounded-md bg-emerald-700 px-5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">{busy ? "Preparing practice…" : cycle.practice_set_id ? "Continue to practice" : "Start targeted practice"}</button>
       </div>
     </div>
